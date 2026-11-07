@@ -1,6 +1,8 @@
 .Language=English,English (English)
 
 // RPNCalc - Far Manager plug-in: language file
+// SPDX-License-Identifier: MIT
+// Copyright (c) 2026 Marco Pistella
 //
 // A message is a line that starts with a double quote. Far numbers the messages from 0 in the order in which they
 // appear and the plug-in asks for them by number: do not add, remove or reorder messages. Every line that does
