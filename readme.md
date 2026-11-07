@@ -193,7 +193,7 @@ build.bat          builds both versions, compressed with UPX when it is found
 build.bat x64      builds .\x64\RPNCalc.dll (64 bit)
 build.bat x86      builds .\X86\RPNCalc.dll (32 bit)
 build.bat noupx    does not compress the DLLs (can be combined with x64 or x86)
-build.bat zip      also creates RPNCalc-<version>.zip, with the folders built, RPNCalc.txt and LICENSE
+build.bat zip      also creates RPNCalc-<version>.zip, for example RPNCalc-1.0.0.zip, with the folders built, RPNCalc.txt and LICENSE
 ```
 
 `RPNCalcEng.lng` and `RPNCalcEng.hlf` are copied next to each DLL, so that the folder is ready to be copied into the Far plug-ins folder.

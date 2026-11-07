@@ -2,14 +2,16 @@
  * Copyright (c) 2026 Marco Pistella */
 /* Version resource of RPNCalc.dll (compiled by build.bat with windres and linked into the DLL).
  * The version is the one that Far reads for the plug-in: keep it equal to Info->Version in GetGlobalInfoW
- * (the PLUGIN_VER_* values of rpncalc.cpp); build.bat checks it. */
+ * (the PLUGIN_VER_* values of rpncalc.cpp); build.bat checks it.
+ * Windows and Far want four numbers: the build number is 0 and is not shown. VER_STRING (shown in the Details
+ * tab of the DLL, and used by build.bat for the name of the zip) is major.minor.patch. */
 #include <winver.h>
 
 #define VER_MAJOR     1
 #define VER_MINOR     0
 #define VER_PATCH     0
 #define VER_BUILD     0
-#define VER_STRING    "1.0.0.0"
+#define VER_STRING    "1.0.0"
 
 VS_VERSION_INFO VERSIONINFO
 FILEVERSION    VER_MAJOR, VER_MINOR, VER_PATCH, VER_BUILD

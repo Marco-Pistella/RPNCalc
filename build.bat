@@ -9,7 +9,7 @@ rem    build.bat            builds both versions
 rem    build.bat x64        builds only the 64-bit version, into .\x64
 rem    build.bat x86        builds only the 32-bit version, into .\X86
 rem    build.bat noupx      (with or without x64/x86) skips the UPX packing step
-rem    build.bat zip        (with or without the others) also creates RPNCalc-<version>.zip, with the
+rem    build.bat zip        (with or without the others) also creates RPNCalc-<version>.zip (for example RPNCalc-1.0.0.zip), with the
 rem                         DLL folders that were built, RPNCalc.txt and LICENSE; needs tar.exe (Windows 10+)
 rem
 rem  Each output folder also receives RPNCalcEng.lng and RPNCalcEng.hlf, which Far looks for next
@@ -37,6 +37,16 @@ rem  their size. Use "noupx" for a plain DLL.
 rem ============================================================================================
 setlocal EnableExtensions DisableDelayedExpansion
 pushd "%~dp0"
+if errorlevel 1 (
+    echo ERROR: cannot change to the folder of build.bat.
+    exit /b 1
+)
+
+rem Everything is taken from the folder of this script, and from nowhere else: the source files are named with
+rem their full path.
+set "HERE=%~dp0"
+set "SRC=%HERE%rpncalc.cpp"
+set "RCFILE=%HERE%rpncalc.rc"
 
 rem ---- command line ----------------------------------------------------------------------------
 set "DO64="
@@ -55,13 +65,25 @@ if not defined DO64 if not defined DO32 set "DO64=1" & set "DO32=1"
 if not defined ENV64 set "ENV64=mingw64 ucrt64"
 if not defined ENV32 set "ENV32=mingw32"
 
+rem ---- source files and license ------------------------------------------------------------------
+if not exist "%SRC%" echo ERROR: source file "%SRC%" not found. & goto fail
+if not exist "%RCFILE%" echo ERROR: resource file "%RCFILE%" not found. & goto fail
+rem the license file is LICENSE (or LICENSE.TXT)
+set "LICFILE="
+if exist "LICENSE" set "LICFILE=LICENSE"
+if not defined LICFILE if exist "LICENSE.TXT" set "LICFILE=LICENSE.TXT"
+if defined DOZIP if not defined LICFILE echo ERROR: file LICENSE not found, it is needed by the zip option. & goto fail
+echo Source: %SRC%
+
 rem ---- version: rpncalc.rc must agree with the PLUGIN_VER_* values of rpncalc.cpp ---------------------
 set "VERBAD="
 for %%V in (MAJOR MINOR PATCH BUILD) do call :getver %%V
 if defined VERBAD goto fail
-set "VERSTR=%VER_MAJOR%.%VER_MINOR%.%VER_PATCH%.%VER_BUILD%"
+rem the version shown (VER_STRING, the name of the zip): major.minor.patch (the build number is shown only if it is not 0)
+set "VERSTR=%VER_MAJOR%.%VER_MINOR%.%VER_PATCH%"
+if not "%VER_BUILD%"=="0" set "VERSTR=%VERSTR%.%VER_BUILD%"
 set "RS="
-for /f "tokens=3" %%N in ('%SystemRoot%\System32\find.exe "#define VER_STRING " rpncalc.rc') do set "RS=%%~N"
+for /f "tokens=1-3" %%M in ('%SystemRoot%\System32\find.exe "#define VER_STRING " "%RCFILE%"') do if "%%M"=="#define" set "RS=%%~O"
 if not "%RS%"=="%VERSTR%" echo ERROR: VER_STRING in rpncalc.rc is "%RS%", expected "%VERSTR%". & goto fail
 
 rem ---- Far Manager SDK header (plugin.hpp) -----------------------------------------------------
@@ -152,7 +174,7 @@ if not exist obj mkdir obj
 if not exist "%OUT%" mkdir "%OUT%"
 echo.
 echo [%ARCH%] using %ENVNAME% - %BIN%
-"%BIN%\windres.exe" -O coff -I. -i rpncalc.rc -o "obj\res_%ARCH%.o"
+"%BIN%\windres.exe" -O coff -I. -i "%RCFILE%" -o "obj\res_%ARCH%.o"
 if errorlevel 1 exit /b 1
 if exist "%OUT%\RPNCalc.dll" del /q "%OUT%\RPNCalc.dll"
 call :cc ""
@@ -194,7 +216,7 @@ exit /b 0
 
 rem ---- :cc  extra g++ flags: compiles and links the DLL -----------------------------------------------------
 :cc
-"%BIN%\g++.exe" -std=c++17 -Os -Wall -Wextra -fno-ident -ffunction-sections -fdata-sections -I. %SDKINC% %~1 rpncalc.cpp "obj\res_%ARCH%.o" -shared -static -static-libgcc -static-libstdc++ -s -Wl,--gc-sections -Wl,--kill-at -o "%OUT%\RPNCalc.dll"
+"%BIN%\g++.exe" -std=c++17 -Os -Wall -Wextra -fno-ident -ffunction-sections -fdata-sections -I. %SDKINC% %~1 "%SRC%" "obj\res_%ARCH%.o" -shared -static -static-libgcc -static-libstdc++ -s -Wl,--gc-sections -Wl,--kill-at -o "%OUT%\RPNCalc.dll"
 exit /b %errorlevel%
 
 rem ---- :chkexp  checks that the DLL exports the four plug-in entry points with undecorated names -----------
@@ -207,8 +229,8 @@ rem ---- :getver  part (MAJOR, MINOR, PATCH, BUILD): reads it from rpncalc.cpp a
 :getver
 set "CV="
 set "RV="
-for /f "tokens=3" %%N in ('%SystemRoot%\System32\find.exe "#define PLUGIN_VER_%1 " rpncalc.cpp') do set "CV=%%N"
-for /f "tokens=3" %%N in ('%SystemRoot%\System32\find.exe "#define VER_%1 " rpncalc.rc') do set "RV=%%N"
+for /f "tokens=1-3" %%M in ('%SystemRoot%\System32\find.exe "#define PLUGIN_VER_%1 " "%SRC%"') do if "%%M"=="#define" set "CV=%%O"
+for /f "tokens=1-3" %%M in ('%SystemRoot%\System32\find.exe "#define VER_%1 " "%RCFILE%"') do if "%%M"=="#define" set "RV=%%O"
 if not defined CV echo ERROR: PLUGIN_VER_%1 not found in rpncalc.cpp. & set "VERBAD=1"
 if not defined RV echo ERROR: VER_%1 not found in rpncalc.rc. & set "VERBAD=1"
 if defined CV if defined RV if not "%CV%"=="%RV%" echo ERROR: version %1 differs: rpncalc.cpp has %CV%, rpncalc.rc has %RV%. & set "VERBAD=1"
@@ -218,7 +240,7 @@ exit /b 0
 rem ---- :mkzip  creates RPNCalc-<version>.zip with the folders that were built, RPNCalc.txt and LICENSE -----
 :mkzip
 setlocal
-set "ZIPLIST=RPNCalc.txt LICENSE.TXT"
+set "ZIPLIST=RPNCalc.txt %LICFILE%"
 if defined DO64 set "ZIPLIST=%ZIPLIST% x64"
 if defined DO32 set "ZIPLIST=%ZIPLIST% X86"
 set "ZIPFILE=RPNCalc-%VERSTR%.zip"

@@ -60,7 +60,7 @@ static const GUID DialogGuid = { 0xc4a91d07, 0x62eb, 0x4e3f, { 0xb7, 0x85, 0x0f,
 static const GUID MsgGuid    = { 0x5d1b3e8a, 0x7f92, 0x4c06, { 0xa3, 0xd5, 0x2b, 0x84, 0xe9, 0xf1, 0xc6, 0x70 } };
 
 // Name, description, author and version shown by Far (GetGlobalInfoW). The version must be the same as the one in
-// rpncalc.rc, which sets the properties of the DLL in Windows Explorer.
+// rpncalc.rc, which sets the properties of the DLL in Windows Explorer. Far wants four numbers: the build is 0.
 #define PLUGIN_NAME       L"RPNCalc"
 #define PLUGIN_DESC       L"RPN (Reverse Polish Notation) calculator"
 #define PLUGIN_AUTHOR     L"Marco Pistella"
