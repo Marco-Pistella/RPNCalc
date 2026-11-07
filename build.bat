@@ -1,4 +1,6 @@
 @echo off
+rem SPDX-License-Identifier: MIT
+rem Copyright (c) 2026 Marco Pistella
 rem ============================================================================================
 rem  build.bat - builds RPNCalc.dll (plug-in for Far Manager 3) with the MSYS2 GCC toolchains,
 rem              as small as possible. Run it from the Windows Command Prompt, in this folder.
@@ -8,7 +10,7 @@ rem    build.bat x64        builds only the 64-bit version, into .\x64
 rem    build.bat x86        builds only the 32-bit version, into .\X86
 rem    build.bat noupx      (with or without x64/x86) skips the UPX packing step
 rem    build.bat zip        (with or without the others) also creates RPNCalc-<version>.zip, with the
-rem                         DLL folders that were built and RPNCalc.txt; needs tar.exe (Windows 10+)
+rem                         DLL folders that were built, RPNCalc.txt and LICENSE; needs tar.exe (Windows 10+)
 rem
 rem  Each output folder also receives RPNCalcEng.lng and RPNCalcEng.hlf, which Far looks for next
 rem  to the DLL, so a folder is ready to be copied into Far's Plugins folder.
@@ -213,10 +215,10 @@ if defined CV if defined RV if not "%CV%"=="%RV%" echo ERROR: version %1 differs
 set "VER_%1=%CV%"
 exit /b 0
 
-rem ---- :mkzip  creates RPNCalc-<version>.zip with the folders that were built and RPNCalc.txt -----------------
+rem ---- :mkzip  creates RPNCalc-<version>.zip with the folders that were built, RPNCalc.txt and LICENSE -----
 :mkzip
 setlocal
-set "ZIPLIST=RPNCalc.txt"
+set "ZIPLIST=RPNCalc.txt LICENSE"
 if defined DO64 set "ZIPLIST=%ZIPLIST% x64"
 if defined DO32 set "ZIPLIST=%ZIPLIST% X86"
 set "ZIPFILE=RPNCalc-%VERSTR%.zip"

@@ -1,3 +1,5 @@
+// SPDX-License-Identifier: MIT
+// Copyright (c) 2026 Marco Pistella
 /*
  * RPNCalc - RPN (Reverse Polish Notation) calculator, Far Manager 3.x plug-in (32 and 64 bit)
  * ===========================================================================================================

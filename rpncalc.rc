@@ -1,3 +1,5 @@
+/* SPDX-License-Identifier: MIT
+ * Copyright (c) 2026 Marco Pistella */
 /* Version resource of RPNCalc.dll (compiled by build.bat with windres and linked into the DLL).
  * The version is the one that Far reads for the plug-in: keep it equal to Info->Version in GetGlobalInfoW
  * (the PLUGIN_VER_* values of rpncalc.cpp); build.bat checks it. */
