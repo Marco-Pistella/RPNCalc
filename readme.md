@@ -1,8 +1,11 @@
+<!-- SPDX-License-Identifier: MIT -->
+<!-- Copyright (c) 2026 Marco Pistella -->
+
 # RPNCalc
 
 A Reverse Polish Notation (RPN) calculator, as a plug-in for **Far Manager 3** (32 and 64 bit).
 
-Author: Marco Pistella · Version 1.0.0
+Author: Marco Pistella · Version 1.0.0 · License: [MIT](LICENSE)
 
 RPNCalc is used in two ways:
 
@@ -190,7 +193,7 @@ build.bat          builds both versions, compressed with UPX when it is found
 build.bat x64      builds .\x64\RPNCalc.dll (64 bit)
 build.bat x86      builds .\X86\RPNCalc.dll (32 bit)
 build.bat noupx    does not compress the DLLs (can be combined with x64 or x86)
-build.bat zip      also creates RPNCalc-<version>.zip, with the folders built and RPNCalc.txt
+build.bat zip      also creates RPNCalc-<version>.zip, with the folders built, RPNCalc.txt and LICENSE
 ```
 
 `RPNCalcEng.lng` and `RPNCalcEng.hlf` are copied next to each DLL, so that the folder is ready to be copied into the Far plug-ins folder.
@@ -211,7 +214,14 @@ Compile options (`-D` on the compiler command line): `RPN_MIN_FAR_BUILD` (the ol
 - `RPNCalcEng.lng`: the language file (English)
 - `RPNCalcEng.hlf`: the help file (English)
 - `RPNCalc.txt`: the full documentation
+- `LICENSE`: the MIT License
 
 ## License
 
-See [LICENSE](LICENSE).
+RPNCalc is released under the [MIT License](LICENSE). Copyright (c) 2026 Marco Pistella.
+
+The copyright notice and the permission notice in [LICENSE](LICENSE) must be included in all copies or substantial portions of the software; the package created by `build.bat zip` contains the `LICENSE` file. The software is provided "as is", without warranty of any kind.
+
+### Third-party files
+
+The `PluginSDK` folder contains files of the [Far Manager](https://github.com/FarGroup/FarManager) SDK, Copyright © 1996 Eugene Roshal and © 2000 Far Group (`DlgBuilder.hpp`: © 2009 Far Group). They are not part of RPNCalc and are not covered by the MIT License: each file keeps its own license header (3-clause BSD), which must be left in place. `plugin.hpp` is the only file that the build needs; its header also states that Far Manager plug-ins that use it can be distributed under any other license.
