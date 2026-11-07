@@ -1,0 +1,274 @@
+.Language=English,English (English)
+.PluginContents=RPN Calculator
+
+@Contents
+$ #RPN Calculator#
+   RPN (Reverse Polish Notation) calculator for Far Manager.
+
+   Operands are entered first, then the operator is applied to
+   the topmost stack entries. For example, #3 4 + 5 *# leaves
+   35 on the stack.
+
+   ~Dialog and keys~@Dialog@
+   ~Numbers and constants~@Numbers@
+   ~Binary operators~@Operators@
+   ~Functions~@Functions@
+   ~Stack commands~@StackCmds@
+   ~Number bases (bin, hex, dec)~@Bases@
+   ~Angle mode~@Angles@
+   ~Undo (undo, Ctrl+Backspace)~@Undo@
+   ~Command line (rpn: prefix)~@CommandLine@
+   ~Errors and persistence~@Errors@
+
+@Dialog
+$ #Dialog and keys#
+   Open the calculator from the plugins menu (F11), item
+   "RPN Calculator".
+
+   The dialog shows the eight topmost stack levels. Level 1 (X)
+   is at the bottom, next to the input line; level 2 is Y,
+   level 3 is Z, and so on. Type commands separated by white
+   space and press Enter. Several commands can be typed on one
+   line.
+
+   Keys in the input line:
+
+   #Enter#                  Evaluate the line (empty line: DUP).
+   #Ctrl+Enter#             Like Enter, then close the dialog and
+                          insert X into the Far command line,
+                          with all the digits it needs. On an empty
+                          line it does not DUP: it only inserts X.
+   #+  *  /  ^#             Empty line: apply the operator at once.
+   #Backspace#              Empty line: DROP (remove X).
+   #Del#                    Empty line: CLR (clear the whole stack).
+                          (A line holding only blanks is not empty:
+                          these keys then edit the line as usual.)
+   #Ctrl+Backspace#         UNDO: restore the state before the
+                          last command (see ~Undo~@Undo@).
+   #Alt+F1#                 Subtract: Y - X (the - command).
+   #Alt+F2#                 Change sign of X (chs).
+   #Alt+F3#                 Reciprocal of X (inv).
+   #Alt+F4#                 Swap X and Y (swap).
+   #F1#                     This help.
+   #Esc#                    Close the dialog. The stack is kept.
+
+   Text already typed in the input line is evaluated before an
+   Alt+F1...Alt+F4 command; if it contains an error, nothing is
+   changed. If your terminal intercepts Alt+F4, type #swap#.
+
+   Ctrl+Backspace works also when the input line contains text;
+   the text is left as it is.
+
+   ~Contents~@Contents@
+
+@Numbers
+$ #Numbers and constants#
+   Decimal numbers: #3.14#, #-2#, #1e-5#. A decimal comma is
+   accepted too: #3,14#.
+
+   Binary, hexadecimal and decimal integers carry a suffix:
+   1010##B is binary, 1F##H is hexadecimal and 255##D is a plain
+   decimal integer (the form set by dec). Digits are 0-9 and
+   A-F; the suffix and the digits are not case sensitive; a
+   leading sign (+ or -) is allowed. The absolute value must
+   not exceed 2^53 = 9007199254740992. See ~Number bases~@Bases@.
+
+   A decimal number too large for a double is rejected (Invalid
+   number). One too small to be represented as a non-zero
+   double underflows to 0; subnormal values are accepted.
+
+   Constants: #pi# and #e# push the constant on the stack.
+
+   Command names are not case sensitive. Tokens are separated
+   by white space (spaces or tabs).
+
+   ~Contents~@Contents@
+
+@Operators
+$ #Binary operators#
+   A binary operator takes Y and X and replaces them with the
+   result. Example: #10 3 -# leaves 7.
+
+   #+#  #-#  #*#  #/#             Y + X, Y - X, Y * X, Y / X.
+   #^#  #**#                  Y raised to the power X.
+   #%#  #mod#                 Remainder of Y / X (sign of Y).
+   #atan2#                  Angle whose tangent is Y / X; both
+                          signs select the quadrant. The result
+                          is in the current ~angle mode~@Angles@.
+   #min#  #max#               The smaller / the larger of Y and X.
+
+   Division by zero (/, %, mod) is an error.
+
+   ~Contents~@Contents@
+
+@Functions
+$ #Functions#
+   A function replaces X with its result.
+
+   #neg#  #chs#               Change sign.
+   #abs#                    Absolute value.
+   #inv#                    Reciprocal, 1 / X (X must not be 0).
+   #sq#                     X squared.
+   #sqrt#                   Square root (X must not be negative).
+   #cbrt#                   Cube root.
+   #exp#                    e raised to the power X.
+   #ln#                     Natural logarithm (X must be > 0).
+   #log#                    Base 10 logarithm (X must be > 0).
+   #log2#                   Base 2 logarithm (X must be > 0).
+   #sin#  #cos#  #tan#          X is in the current ~angle mode~@Angles@.
+                          A result below the resolution of the
+                          argument, like cos(pi/2) or sin(pi),
+                          is replaced by exactly 0. Small results
+                          of small arguments are kept.
+   #asin#  #acos#             X must be in -1..1. The result is in
+                          the current angle mode.
+   #atan#                   Arc tangent, in the current angle mode.
+   #sinh#  #cosh#  #tanh#       Hyperbolic functions (not affected
+                          by the angle mode).
+   #fact#                   Factorial (X an integer, 0..170).
+   #floor#                  Largest integer not greater than X.
+   #ceil#                   Smallest integer not less than X.
+   #round#                  Nearest integer (halves away from 0).
+   #int#                    Integer part (truncation toward 0).
+
+   ~Contents~@Contents@
+
+@StackCmds
+$ #Stack commands#
+   #dup#                    Copy X to a new level.
+   #drop#                   Remove X.
+   #swap#                   Exchange X and Y.
+   #over#                   Copy Y to the top (it becomes X).
+   #rot#                    Rotate the three topmost levels:
+                          Z becomes X, X becomes Y, Y becomes Z.
+   #clr#  #clear#             Clear the whole stack.
+   #undo#                   Undo the last command
+                          (see ~Undo~@Undo@).
+   #sum#                    Replace the whole stack with the sum
+                          of all its entries.
+   #avg#                    Replace the whole stack with the
+                          average of all its entries.
+
+   The stack can hold up to 10000 entries.
+
+   ~Contents~@Contents@
+
+@Bases
+$ #Number bases (bin, hex, dec)#
+   These commands change the way X is displayed. X must be an
+   integer not greater than 2^53 in absolute value.
+
+   #bin#                    Binary: 255 bin gives 11111111##B
+   #hex#                    Hexadecimal: 255 hex gives FF##H
+   #dec#                    Decimal: FF##H dec gives 255
+
+   The value of X does not change, only the way it is shown.
+   Negative numbers are shown with a minus sign: -10 bin gives
+   -1010##B (this is not two's complement). dec shows X as a
+   plain integer, never with an exponent.
+
+   The forms can also be typed directly (1010##B, FF##H, 255##D)
+   and are shown in that form until they are used in a
+   calculation. The result of a calculation is shown in the
+   normal form. dup, over, swap and rot keep the form.
+
+   ~Contents~@Contents@
+
+@Angles
+$ #Angle mode#
+   #rad#                    Angles in radians (the default).
+   #deg#                    Angles in degrees.
+
+   The mode affects sin, cos, tan, asin, acos, atan and atan2.
+   The hyperbolic functions are not affected. The current mode
+   is shown in the status line of the dialog and is saved
+   together with the stack.
+
+   ~Contents~@Contents@
+
+@Undo
+$ #Undo (undo, Ctrl+Backspace)#
+   The #undo# command, or Ctrl+Backspace in the dialog, restores
+   the stack and the angle mode to the state they had before the
+   last command that changed them. Repeat it to go back further.
+
+   Every command that changes something is one undo step,
+   numbers included: after #3 4 +# three undos are needed to
+   get back to an empty stack. A command that changes nothing
+   (for example swap with two identical entries) is not recorded.
+
+   #undo# can also be typed in the input line or after the
+   rpn: prefix. It is not recorded itself, so there is no redo.
+
+   Up to 100 steps are kept. The history is kept while Far is
+   running, also between the dialog and the command line, but it
+   is not saved in the Far settings. A line that contains an
+   error changes neither the stack nor the history.
+
+   If the history is empty, the error "Nothing to undo" is shown.
+
+   ~Contents~@Contents@
+
+@CommandLine
+$ #Command line (rpn: prefix)#
+   Type #rpn:# followed by the commands in the Far command line
+   and press Enter, for example:
+
+      rpn: 3 4 + 5 *
+
+   The value of X and the stack depth are shown in a message
+   box ("Stack is empty" when nothing is left). The stack and
+   the angle mode are shared with the dialog and are kept
+   between sessions.
+
+   If the line contains an error, the error is reported and the
+   stack is left as it was.
+
+   To copy X from the dialog to the command line, press
+   Ctrl+Enter.
+
+   ~Contents~@Contents@
+
+@Errors
+$ #Errors and persistence#
+   If a line contains an error, the whole line is cancelled:
+   the stack and the angle mode return to their previous state.
+
+   #Not enough operands#
+      The command needs more entries than the stack holds.
+   #Division by zero#
+      Division, remainder or inv with a zero divisor.
+   #Invalid result#
+      The result is not a finite number: an overflow,
+      or an undefined operation such as -8 0.5 ^.
+   #Stack is full#
+      The stack already holds 10000 entries.
+   #Stack is empty#
+      Ctrl+Enter was pressed but the line left the
+      stack empty (for example clr).
+   #Nothing to undo#
+      The undo history is empty.
+   #Unknown command: ...#
+      The token is neither a number nor a command.
+   #Invalid number: ...#
+      The token is not a valid number.
+   #Invalid digit for the base: ...#
+      A digit not allowed in the base, for example 12##B.
+   #Number too large (max 2^53): ...#
+      A number with a ##B, ##H or ##D suffix above 2^53.
+   #Not an integer#
+      bin, hex or dec was used with a fractional X.
+   #Integer too large (max 2^53)#
+      bin, hex or dec was used with X above 2^53.
+   #Square root of a negative number#
+   #Logarithm of a non-positive number#
+   #Argument out of range (-1..1)#
+      asin or acos with X outside -1..1.
+   #Factorial needs an integer 0-170#
+
+   The stack and the angle mode are saved in the Far settings
+   when the dialog is closed and after each successful rpn:
+   command, together with the display forms set by bin, hex
+   and dec. The undo history is not saved.
+
+   ~Contents~@Contents@

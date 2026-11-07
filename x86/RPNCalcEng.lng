@@ -1,0 +1,106 @@
+.Language=English,English (English)
+
+// RPNCalc - Far Manager plug-in: language file
+//
+// A message is a line that starts with a double quote. Far numbers the messages from 0 in the order in which they
+// appear and the plug-in asks for them by number: do not add, remove or reorder messages. Every line that does
+// not start with a double quote (like this one) is ignored by Far.
+//
+// To translate: copy this file to RPNCalc<Language>.lng, change the .Language line to the name of the language as Far
+// shows it (the word before the comma; the one after it is only a description), and translate the text of the
+// messages, in the quotes. If the translation uses characters outside ASCII, save the file as UTF-8 with BOM (or
+// UTF-16), in the folder of RPNCalc.dll. Restart Far.
+//
+// Placeholder: %s is replaced by a value when the text is shown (a number, a command, the value of X, an error text);
+// keep it in the translation, in the place where it reads naturally. The comment above a message says what it is.
+//
+// The help (F1) is not in this file: it is RPNCalcEng.hlf.
+
+// ---- Dialog (F11, RPN Calculator) and message boxes ----
+
+// M_TITLE: name of the plug-in: title of the dialog, item of the plug-ins menu, title of the message boxes
+"RPN Calculator"
+
+// M_HINT1: key hints at the bottom of the dialog, first line. A line is 62 columns wide: a longer text is cut
+"Enter=calc  Ctrl+Enter=cmd line  BS=drop  Del=clr  F1=Help"
+
+// M_HINT2: key hints, second line
+"Ctrl+BS=undo  Alt+F1=-  Alt+F2=chs  Alt+F3=inv  Alt+F4=swap"
+
+// M_ANGLES_RAD: status line of the dialog (62 columns): the angle mode, followed on the same line by the stack depth
+"Angles: radians"
+
+// M_ANGLES_DEG
+"Angles: degrees"
+
+// M_STACK_DEPTH: %s = number of entries on the stack (status line of the dialog and message box of "rpn:")
+"Stack depth: %s"
+
+// M_ERROR: status line of the dialog when the line has an error; %s = one of the error texts below
+"Error: %s"
+
+// M_RESULT: message box of "rpn:" typed in the Far command line; %s = the value of X
+"X = %s"
+
+// M_STACK_EMPTY: nothing on the stack: message box of "rpn:", and Ctrl+Enter in the dialog
+"Stack is empty"
+
+// ---- Errors in a line of commands ----
+// The whole line is cancelled and the text is shown in the status line of the dialog or in the message box of "rpn:".
+// Where there is a %s, it is the offending token.
+
+// M_ERR_NOT_ENOUGH
+"Not enough operands"
+
+// M_ERR_DIV_ZERO
+"Division by zero"
+
+// M_ERR_INVALID_RESULT
+"Invalid result"
+
+// M_ERR_STACK_FULL
+"Stack is full"
+
+// M_ERR_NO_UNDO
+"Nothing to undo"
+
+// M_ERR_UNKNOWN_CMD: %s = the token
+"Unknown command: %s"
+
+// M_ERR_BAD_NUMBER: %s = the token
+"Invalid number: %s"
+
+// M_ERR_BAD_DIGIT: %s = the token
+"Invalid digit for the base: %s"
+
+// M_ERR_TOO_LARGE: %s = the token
+"Number too large (max 2^53): %s"
+
+// M_ERR_NOT_INTEGER
+"Not an integer"
+
+// M_ERR_INT_TOO_LARGE
+"Integer too large (max 2^53)"
+
+// M_ERR_SQRT_NEG
+"Square root of a negative number"
+
+// M_ERR_LOG_NONPOS
+"Logarithm of a non-positive number"
+
+// M_ERR_ARG_RANGE
+"Argument out of range (-1..1)"
+
+// M_ERR_FACTORIAL
+"Factorial needs an integer 0-170"
+
+// ---- Failures that are not an error of the user ----
+
+// M_ERR_MEMORY: status line of the dialog
+"Out of memory"
+
+// M_ERR_INTERNAL: status line of the dialog
+"Internal error"
+
+// M_ERR_FATAL: message box shown when the plug-in cannot run at all (its title is M_TITLE)
+"Out of memory or internal error"
