@@ -218,7 +218,7 @@ exit /b 0
 rem ---- :mkzip  creates RPNCalc-<version>.zip with the folders that were built, RPNCalc.txt and LICENSE -----
 :mkzip
 setlocal
-set "ZIPLIST=RPNCalc.txt LICENSE"
+set "ZIPLIST=RPNCalc.txt LICENSE.TXT"
 if defined DO64 set "ZIPLIST=%ZIPLIST% x64"
 if defined DO32 set "ZIPLIST=%ZIPLIST% X86"
 set "ZIPFILE=RPNCalc-%VERSTR%.zip"
