@@ -15,6 +15,7 @@ CONTENTS
   7. Limits
   8. Languages
   9. Building from source
+ 10. Sources and latest version
 
 
 1. WHAT IT DOES
@@ -389,3 +390,13 @@ To add a message to the plug-in: add its identifier to the enum before M_COUNT, 
 the same position in kDefaultMsg, and the message at the same position in every .lng file, with a
 comment above it that says what "%s" stands for. The enum, kDefaultMsg and RPNCalcEng.lng list the
 messages in the same order, with the same text.
+
+
+10. SOURCES AND LATEST VERSION
+----------------------------------------------------------------------------------------------------
+
+The source code of RPNCalc and its latest version are available at:
+
+    https://github.com/Marco-Pistella/RPNCalc
+
+To build the plug-in from the sources, see section 9.
