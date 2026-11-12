@@ -1,0 +1,172 @@
+RPNCalc - changes of each version
+Far Manager 3 plug-in (32 and 64-bit)
+Author: Marco Pistella
+License: MIT (see the file LICENSE)
+====================================================================================================
+
+The newest version comes first. The version number is the one that Far shows for the plug-in
+(PLUGIN_VER_* in rpncalc.cpp, VER_* in rpncalc.rc).
+
+VERSION 1.0.1
+----------------------------------------------------------------------------------------------------
+
+A correction release: no new command and no new key in the plug-in (build.bat has three additions,
+items 12 to 14). It follows a review of the source of 1.0.0. Every point of the review was checked
+against the code, and the defects were reproduced with tests before anything was changed. Points
+that are a matter of taste, or that are limits of the double precision numbers, were left as they
+are (see "Reviewed and left unchanged" below).
+
+Corrected
+
+  1. A line interrupted by an exception was not cancelled. Engine::Eval put the state back only
+     after an error of the user (RpnError). If the memory ran out in the middle of a line
+     (std::bad_alloc), the part of the line that had already run stayed on the stack, and the
+     undo history could disagree with the stack. Now any exception cancels the whole line: stack,
+     angle mode and undo history are as they were before it. The state is put back by swapping,
+     so this cannot fail in its turn, and the exception goes on to the caller, which reports
+     "Out of memory" as before.
+
+  2. A decimal number that is not zero but too small for a double (1e-400, 2e-324, ...) was
+     silently read as 0, and then used in the calculation. Now it is rejected with "Invalid
+     number: ...", like a number that is too large. Subnormal values (down to about 5e-324),
+     0 and -0 are still accepted. The 1.0.0 help said that such a number "underflows to 0": this
+     was a documented behaviour and it is changed on purpose.
+
+  3. fact was not exact. It used the gamma function of the C library, whose accuracy depends on
+     the runtime (in a test it was not exact even for 18!, which a double can hold exactly).
+     Now the product is computed with integer arithmetic and rounded once at the end: the result
+     is exact up to 22!, and the nearest double to the true value for larger X (checked for every
+     X from 0 to 170 against exact integers). For large X the last digit of the result can differ
+     from 1.0.0.
+
+  4. min and max: for -0 and +0 the sign of the result depended on the order of the operands
+     ("-0 0 max" gave -0, "0 -0 max" gave 0). Now -0 is always taken as smaller than +0.
+
+  5. The settings. Three defects:
+     - If Far could not open the settings at the first use, the stored state was marked as read
+       anyway: it was never read again in that session, and the next save replaced the stored
+       stack with the current one. Now the stored state is read as soon as the settings can be
+       opened (the plug-in tries again at each use), and nothing is saved until it has been read,
+       so a stack that could not be read is never overwritten.
+     - The results of the calls that write the settings were not checked. Now, if the stack and
+       the angle mode cannot be saved, the message "Cannot save the stack and the angle mode in
+       the Far settings" is shown: in a message box after the dialog is closed, or as the last
+       line of the message box of "rpn:". The calculator goes on working.
+     - The settings handle was not released if an exception occurred while it was open (for
+       example when the memory ran out while the text of the stack was being built). It is now
+       released in every case.
+
+  6. Ctrl+Enter in the dialog: the result of the insertion into the Far command line was not
+     checked. If Far did not insert the text, the value was lost with the closed dialog. Now a
+     message box says "Cannot insert X into the command line" and shows the value of X.
+
+Improved
+
+  7. The cost of the undo steps. Before every command the whole stack was copied, and compared with
+     the new one afterwards, so the time of a line grew with the square of its number of tokens
+     (a line of 10000 numbers copied about 50 million entries). Now a step keeps only the levels
+     of the stack that the command can change: the top three, or the whole stack for clr, sum and
+     avg. The behaviour of undo is the same: every command that changes something is one step, up
+     to 100 steps, and a command that changes nothing is not recorded. Measured on a test machine:
+     a line of 10000 numbers 54 ms before, 2 ms now; 9999 additions on that stack 49 ms before,
+     1 ms now. The history of 100 steps takes a few KB instead of up to 16 MB (clr, sum and avg
+     still keep the whole stack).
+
+Documented (the behaviour is the same as in 1.0.0)
+
+  8. sin, cos, tan: the replacement of a very small result by 0 is described exactly. The limit is
+     four units in the last place of the argument, it is not applied for |X| of 1e9 or more, and
+     it can replace a result that is really different from 0: sin of 3.1415926535897936 is
+     -3.2e-16 and is shown as 0. The comment in the source no longer says that such a result
+     "carries no information".
+
+  9. tan gives no error at its poles: "90 deg tan" and "pi 2 / tan" give about 1.6e16, because the
+     argument is not exactly the angle of the pole.
+
+ 10. Ctrl+Enter when the line leaves the stack empty (after clr, for example): the line has been
+     evaluated and is cleared, as with Enter, and the dialog stays open. Keeping the text in the
+     line would make the next Enter evaluate it twice, so this is not changed.
+
+Language file
+
+ 11. RPNCalcEng.lng has two more messages, at the end (the file now has 29): M_ERR_SAVE and
+     M_ERR_CMDLINE. A language file made for 1.0.0 keeps working, but Far reports a bad language
+     file (and the English text is used) when one of the two new messages is needed. To update
+     it, copy the two messages from RPNCalcEng.lng to the end of the file.
+
+Build script
+
+ 12. build.bat, MSYS2 not found: the error message now gives the address to download it
+     (https://www.msys2.org). The build stops, as before.
+
+ 13. build.bat, MSYS2 found but the compiler of a DLL missing: it used to print the pacman
+     command and stop. Now it lists the compilers that it can install with pacman, among the
+     environments that are tried (ENV64, ENV32): mingw-w64-x86_64-gcc and
+     mingw-w64-ucrt-x86_64-gcc for the 64 bit DLL, mingw-w64-i686-gcc for the 32 bit one. The
+     user types the number of the one to install, or 0 for none. The package is installed with
+     pacman, which downloads it, and the build goes on. With 0, with an answer that is not valid
+     three times (also when the input is not a keyboard and ends), or if pacman fails, the build
+     of that DLL stops with an error that says that the DLL cannot be built. If pacman fails
+     because MSYS2 is old, update it (pacman -Syu in an MSYS2 shell) and run build.bat again.
+     MSYS2 has deprecated the environment mingw64 and is phasing out the 32 bit packages
+     (mingw32): they can disappear from its repositories
+     (https://www.msys2.org/docs/environments/).
+
+ 14. build.bat zip: the package now contains CHANGELOG.TXT as well (the build stops with an
+     error if the file is missing).
+
+Files that changed
+
+ 15. rpncalc.cpp: the corrections above; version 1.0.1 (PLUGIN_VER_PATCH).
+     rpncalc.rc: version 1.0.1 (VER_PATCH, VER_STRING).
+     RPNCalcEng.lng: the two new messages.
+     RPNCalcEng.hlf, RPNCalc.txt, readme.md: the changes of behaviour described above, the new
+     messages, the structure of the engine, the build script.
+     build.bat: items 12, 13 and 14.
+     CHANGELOG.TXT: new.
+
+Reviewed and left unchanged
+
+     - sum and avg lose small terms when large values cancel each other: a limit of the double
+       precision numbers, already described in the source.
+     - The replacement of libstdc++'s exception helpers and terminate handler (the size of the
+       DLL) depends on the library of the compiler. It is kept; RPN_KEEP_FUNCTEXCEPT turns the
+       replacement off, and build.bat tries again with it if the compilation fails.
+     - A switch to turn the replacement of small trigonometric results off, and an error for the
+       poles of tan, were not added: they would be new features, not corrections.
+
+How it was checked
+
+     The engine of 1.0.1 was run side by side with the one of 1.0.0 on 160000 random lines (every
+     command, errors, deep stacks, long undo histories): same results, same error texts, same
+     undo history after every line. The failure of every memory allocation was simulated in a set
+     of lines: in 1.0.0 the state was left changed in 341 of 619 cases, in 1.0.1 in none of 475.
+     The dialog, the "rpn:" command line, the settings and the insertion into the command line
+     were run against a simulated Far, including the failure of each call.
+     build.bat could not be run (the checks were made on Linux, without Windows). Its changes were
+     checked with a script (labels, line endings, characters) and read line by line by a second
+     reviewer, who also followed by hand the cases of the new menu: a choice, 0, answers that are
+     not valid, the end of the input, a failure of pacman, an unknown environment.
+
+
+VERSION 1.0.0
+----------------------------------------------------------------------------------------------------
+
+First release.
+
+  - A Reverse Polish Notation calculator for Far Manager 3, 32 and 64 bit.
+  - A dialog (F11, "RPN Calculator") with the stack, an input line and a status line, worked with
+    the keyboard alone; the Far command line with the prefix "rpn:", with the result in a message
+    box. The stack and the angle mode are shared and are kept between sessions.
+  - Stack of up to 10000 entries, the first 8 levels shown in the dialog.
+  - Binary operators, functions, constants and stack commands; radians and degrees.
+  - Integers in binary, hexadecimal and decimal (1010#B, FF#H, 255#D) and the bin, hex and dec
+    commands.
+  - Undo of 100 steps, shared by the dialog and the command line.
+  - Every line is atomic: after an error the stack, the angle mode and the undo history are as
+    they were before the line.
+  - Numbers read and written with the C runtime, independent of the Windows locale; 17 digits in
+    the saved stack so that every value is read back exactly.
+  - All the texts come from a Far language file (.lng) and the help is a Far help file (.hlf);
+    the English texts are also built into the DLL.
+  - Built with MSYS2 GCC by build.bat, as small as possible (optional UPX packing).

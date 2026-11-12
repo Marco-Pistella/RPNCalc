@@ -9,8 +9,8 @@ rem    build.bat            builds both versions
 rem    build.bat x64        builds only the 64-bit version, into .\x64
 rem    build.bat x86        builds only the 32-bit version, into .\X86
 rem    build.bat noupx      (with or without x64/x86) skips the UPX packing step
-rem    build.bat zip        (with or without the others) also creates RPNCalc-<version>.zip (for example RPNCalc-1.0.0.zip), with the
-rem                         DLL folders that were built, RPNCalc.txt and LICENSE; needs tar.exe (Windows 10+)
+rem    build.bat zip        (with or without the others) also creates RPNCalc-<version>.zip (for example RPNCalc-1.0.1.zip), with the
+rem                         DLL folders that were built, RPNCalc.txt, CHANGELOG.TXT and LICENSE; needs tar.exe (Windows 10+)
 rem
 rem  Each output folder also receives RPNCalcEng.lng and RPNCalcEng.hlf, which Far looks for next
 rem  to the DLL, so a folder is ready to be copied into Far's Plugins folder.
@@ -18,7 +18,10 @@ rem
 rem  Toolchains (found automatically under the MSYS2 folder, usually C:\msys64):
 rem    x64  mingw64 (msvcrt: smallest DLL), otherwise ucrt64
 rem    x86  mingw32
-rem    If a compiler is missing the script prints the pacman command that installs it.
+rem    If the compiler of a DLL is missing the script lists the compilers it can install with pacman
+rem    (mingw-w64-x86_64-gcc and mingw-w64-ucrt-x86_64-gcc for x64, mingw-w64-i686-gcc for x86) and
+rem    asks which one to install, or none: with none the build of that DLL stops with an error.
+rem    If MSYS2 is not found the script prints where to download it: https://www.msys2.org
 rem
 rem  Optional environment variables:
 rem    MSYS2_ROOT   MSYS2 folder, when it is not C:\msys64 (or on another drive)
@@ -73,6 +76,7 @@ set "LICFILE="
 if exist "LICENSE" set "LICFILE=LICENSE"
 if not defined LICFILE if exist "LICENSE.TXT" set "LICFILE=LICENSE.TXT"
 if defined DOZIP if not defined LICFILE echo ERROR: file LICENSE not found, it is needed by the zip option. & goto fail
+if defined DOZIP if not exist "CHANGELOG.TXT" echo ERROR: file CHANGELOG.TXT not found, it is needed by the zip option. & goto fail
 echo Source: %SRC%
 
 rem ---- version: rpncalc.rc must agree with the PLUGIN_VER_* values of rpncalc.cpp ---------------------
@@ -118,6 +122,7 @@ for /f "tokens=2,*" %%A in ('reg query "HKLM\SOFTWARE\Microsoft\Windows\CurrentV
 if defined MSYS2_ROOT if exist "%MSYS2_ROOT%\usr\bin\bash.exe" goto msys_ok
 echo.
 echo ERROR: MSYS2 was not found. Install it in C:\msys64 or set MSYS2_ROOT to its folder.
+echo        Download it from https://www.msys2.org
 goto fail
 :msys_ok
 
@@ -161,12 +166,11 @@ set "BIN="
 set "ENVNAME="
 for %%E in (%~2) do call :probe %%E
 if defined BIN goto have_cc
-echo.
-echo [%ARCH%] ERROR: no g++.exe found in %MSYS2_ROOT% ^(environments tried: %~2^).
-echo [%ARCH%] Install the compiler from an MSYS2 shell with:
-if /i "%ARCH%"=="x64" echo            pacman -S --needed mingw-w64-x86_64-gcc      ^(smallest DLL, msvcrt^)
-if /i "%ARCH%"=="x64" echo            pacman -S --needed mingw-w64-ucrt-x86_64-gcc ^(alternative: needs the UCRT, Windows 10 or updated 7/8.1^)
-if /i "%ARCH%"=="x86" echo            pacman -S --needed mingw-w64-i686-gcc
+call :install "%~2"
+if errorlevel 1 exit /b 1
+for %%E in (%~2) do call :probe %%E
+if defined BIN goto have_cc
+echo [%ARCH%] ERROR: still no g++.exe found in %MSYS2_ROOT%, so the %ARCH% DLL cannot be built.
 exit /b 1
 :have_cc
 set "PATH=%BIN%;%PATH%"
@@ -214,6 +218,85 @@ if exist "%MSYS2_ROOT%\%~1\bin\g++.exe" set "BIN=%MSYS2_ROOT%\%~1\bin"
 if defined BIN set "ENVNAME=%~1"
 exit /b 0
 
+rem ---- :install  environments to try: no compiler was found, asks which one to install with pacman ---------
+rem Returns 0 if a package was installed (the caller looks for the compiler again) or 1 if not, with the message printed.
+:install
+echo.
+echo [%ARCH%] ERROR: no g++.exe found in %MSYS2_ROOT% ^(environments tried: %~1^).
+set "NOPT=0"
+for %%E in (%~1) do call :addopt %%E
+if "%NOPT%"=="0" goto install_unknown
+echo         0  none     install nothing: the %ARCH% DLL is not built
+echo.
+call :ask %NOPT%
+set "PICK=%errorlevel%"
+if "%PICK%"=="0" goto install_none
+set "N=0"
+set "SELPKG="
+for %%E in (%~1) do call :selopt %%E
+if not defined SELPKG goto install_none
+echo.
+echo [%ARCH%] installing %SELPKG% with pacman ...
+"%MSYS2_ROOT%\usr\bin\bash.exe" -lc "pacman -S --needed --noconfirm %SELPKG%"
+if not "%errorlevel%"=="0" goto install_failed
+echo.
+echo [%ARCH%] %SELPKG% installed.
+exit /b 0
+:install_unknown
+echo [%ARCH%] ERROR: no compiler package is known for these environments, install a g++ for them from an MSYS2 shell.
+exit /b 1
+:install_none
+echo [%ARCH%] ERROR: no compiler was installed, so the %ARCH% DLL cannot be built.
+exit /b 1
+:install_failed
+echo.
+echo [%ARCH%] ERROR: pacman could not install %SELPKG%, see its messages above.
+echo [%ARCH%] If this MSYS2 is old, update it first: in an MSYS2 shell run  pacman -Syu  ^(again, until nothing is left
+echo [%ARCH%] to update^), then run build.bat again. The %ARCH% DLL cannot be built until a compiler is installed.
+exit /b 1
+
+rem ---- :addopt  environment name: if a compiler package is known for it, shows it as the next numbered choice ---
+:addopt
+call :pkgfor %1
+if not defined PKG exit /b 0
+if "%NOPT%"=="0" echo [%ARCH%] A compiler can be installed now with pacman. Which one do you want?
+set /a NOPT+=1
+echo         %NOPT%  %PKGTXT%
+exit /b 0
+
+rem ---- :selopt  environment name: if it is the choice number PICK, its package goes into SELPKG --------------
+:selopt
+call :pkgfor %1
+if not defined PKG exit /b 0
+set /a N+=1
+if "%N%"=="%PICK%" set "SELPKG=%PKG%"
+exit /b 0
+
+rem ---- :pkgfor  environment name: sets PKG (the g++ package of that environment) and PKGTXT (its menu line) ----
+:pkgfor
+set "PKG="
+set "PKGTXT="
+if /i "%~1"=="mingw64" set "PKG=mingw-w64-x86_64-gcc" & set "PKGTXT=mingw64  mingw-w64-x86_64-gcc       smallest DLL, msvcrt runtime. Deprecated by MSYS2"
+if /i "%~1"=="ucrt64"  set "PKG=mingw-w64-ucrt-x86_64-gcc" & set "PKGTXT=ucrt64   mingw-w64-ucrt-x86_64-gcc  needs the UCRT: Windows 10, or updated 7/8.1"
+if /i "%~1"=="mingw32" set "PKG=mingw-w64-i686-gcc" & set "PKGTXT=mingw32  mingw-w64-i686-gcc          32 bit. MSYS2 is phasing out the 32 bit packages"
+exit /b 0
+
+rem ---- :ask  highest choice number: asks for a number from 0 to it and returns it in the errorlevel -----------
+rem Anything else is asked again, up to 3 times (also when the input is not a keyboard and ends); then the result is 0.
+:ask
+setlocal EnableDelayedExpansion
+set "TRIES=0"
+:ask_again
+set "CH="
+set /p "CH=Your choice (0-%~1): "
+set "PICKED=-1"
+for /l %%I in (0,1,%~1) do if "!CH!"=="%%I" set "PICKED=%%I"
+if %PICKED% geq 0 exit /b %PICKED%
+set /a TRIES+=1
+if %TRIES% lss 3 echo Please type a number from 0 to %~1. & goto ask_again
+echo No valid choice.
+exit /b 0
+
 rem ---- :cc  extra g++ flags: compiles and links the DLL -----------------------------------------------------
 :cc
 "%BIN%\g++.exe" -std=c++17 -Os -Wall -Wextra -fno-ident -ffunction-sections -fdata-sections -I. %SDKINC% %~1 "%SRC%" "obj\res_%ARCH%.o" -shared -static -static-libgcc -static-libstdc++ -s -Wl,--gc-sections -Wl,--kill-at -o "%OUT%\RPNCalc.dll"
@@ -237,10 +320,10 @@ if defined CV if defined RV if not "%CV%"=="%RV%" echo ERROR: version %1 differs
 set "VER_%1=%CV%"
 exit /b 0
 
-rem ---- :mkzip  creates RPNCalc-<version>.zip with the folders that were built, RPNCalc.txt and LICENSE -----
+rem ---- :mkzip  creates RPNCalc-<version>.zip with the folders that were built, RPNCalc.txt, CHANGELOG.TXT and LICENSE ---
 :mkzip
 setlocal
-set "ZIPLIST=RPNCalc.txt %LICFILE%"
+set "ZIPLIST=RPNCalc.txt CHANGELOG.TXT %LICFILE%"
 if defined DO64 set "ZIPLIST=%ZIPLIST% x64"
 if defined DO32 set "ZIPLIST=%ZIPLIST% X86"
 set "ZIPFILE=RPNCalc-%VERSTR%.zip"

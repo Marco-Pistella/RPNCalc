@@ -18,7 +18,10 @@
  *   6. The exported functions.
  *
  * Design notes:
- *   - A line is atomic: Engine::Eval restores the stack, the angle mode and the undo history when a command fails.
+ *   - A line is atomic: Engine::Eval restores the stack, the angle mode and the undo history when a command fails,
+ *     and also when an exception such as std::bad_alloc interrupts the line (the exception then goes on to the caller).
+ *   - An undo step keeps only the levels of the stack that a command can change (see UndoStep), so recording a step
+ *     costs the same on an empty stack and on a stack of 10000 entries.
  *   - Numbers are read and written with the C runtime (strtod, snprintf), not with iostream or locale classes, so
  *     the result does not depend on the Windows locale. The same syntax is used for typing, for the saved stack and
  *     for the text inserted in the Far command line.
@@ -66,12 +69,13 @@ static const GUID MsgGuid    = { 0x5d1b3e8a, 0x7f92, 0x4c06, { 0xa3, 0xd5, 0x2b,
 #define PLUGIN_AUTHOR     L"Marco Pistella"
 #define PLUGIN_VER_MAJOR  1
 #define PLUGIN_VER_MINOR  0
-#define PLUGIN_VER_PATCH  0
+#define PLUGIN_VER_PATCH  1
 #define PLUGIN_VER_BUILD  0
 
 // Help topic names defined in RPNCalcEng.hlf
 static const wchar_t* const HELP_MAIN    = L"Contents";
 static const wchar_t* const HELP_CMDLINE = L"CommandLine";
+static const wchar_t* const HELP_ERRORS  = L"Errors";
 
 static PluginStartupInfo PSI;
 
@@ -106,6 +110,7 @@ void __throw_out_of_range_fmt(const char*, ...)  { throw std::bad_alloc(); }
 // in (kDefaultMsg, identical to RPNCalcEng.lng) and are used when Far returns nothing, that is when there is no
 // language file.
 // To add a message: add its id before M_COUNT, its text at the same position in kDefaultMsg and in every .lng file.
+// A new message always goes at the end, so that the messages of the existing language files keep their numbers.
 enum {
     M_TITLE,                // dialog title, plug-in menu item, title of the message boxes
     M_HINT1,                // key hints of the dialog, first line
@@ -136,6 +141,9 @@ enum {
     M_ERR_MEMORY,           // failures that are not an error of the user
     M_ERR_INTERNAL,
     M_ERR_FATAL,            // message box shown when OpenW itself fails
+
+    M_ERR_SAVE,             // message box: the stack could not be saved in the Far settings (new in 1.0.1)
+    M_ERR_CMDLINE,          // message box: X could not be inserted in the Far command line (new in 1.0.1)
 
     M_COUNT
 };
@@ -168,6 +176,8 @@ static const wchar_t* const kDefaultMsg[] = {
     L"Out of memory",                                                // M_ERR_MEMORY
     L"Internal error",                                               // M_ERR_INTERNAL
     L"Out of memory or internal error",                              // M_ERR_FATAL
+    L"Cannot save the stack and the angle mode in the Far settings", // M_ERR_SAVE
+    L"Cannot insert X into the command line",                        // M_ERR_CMDLINE
 };
 static_assert(sizeof kDefaultMsg / sizeof kDefaultMsg[0] == M_COUNT, "one built-in text per message id");
 
@@ -273,7 +283,9 @@ static bool LooksNumeric(const std::wstring& t)
 // Parses a decimal number: [+-] digits [. [digits]] or [+-] . digits, then an optional exponent
 // (e|E [+-] digits). ',' is accepted as the decimal separator. Hexadecimal floats, inf and nan are
 // rejected, as is any trailing garbage. The text is rebuilt in a narrow buffer using the C runtime's
-// own decimal separator and converted with strtod. Throws RpnError if the text is not a finite number.
+// own decimal separator and converted with strtod. Throws RpnError if the text is not a finite number, or if it is
+// not zero but too small for a double (it would be read as 0): a number is never silently changed into 0.
+// Subnormal values are accepted.
 static double ParseNum(const std::wstring& s)
 {
     char buf[512];
@@ -283,12 +295,13 @@ static double ParseNum(const std::wstring& s)
     const char point = (dp[0] && !dp[1]) ? dp[0] : '.';
 
     size_t i = 0, n = 0, digits = 0;
+    bool nonzero = false;                                  // some digit of the mantissa is not 0: the value is not 0
     const size_t len = s.size();
     if (i < len && (s[i] == L'+' || s[i] == L'-')) buf[n++] = (char)s[i++];
-    while (i < len && s[i] >= L'0' && s[i] <= L'9') { buf[n++] = (char)s[i++]; digits++; }
+    while (i < len && s[i] >= L'0' && s[i] <= L'9') { nonzero = nonzero || s[i] != L'0'; buf[n++] = (char)s[i++]; digits++; }
     if (i < len && (s[i] == L'.' || s[i] == L',')) {
         buf[n++] = point; i++;
-        while (i < len && s[i] >= L'0' && s[i] <= L'9') { buf[n++] = (char)s[i++]; digits++; }
+        while (i < len && s[i] >= L'0' && s[i] <= L'9') { nonzero = nonzero || s[i] != L'0'; buf[n++] = (char)s[i++]; digits++; }
     }
     bool ok = digits > 0;
     if (ok && i < len && (s[i] == L'e' || s[i] == L'E')) {
@@ -303,7 +316,8 @@ static double ParseNum(const std::wstring& s)
         buf[n] = 0;
         char* end = nullptr;
         v = std::strtod(buf, &end);
-        if (*end == 0 && std::isfinite(v)) return v;   // overflow gives inf and is rejected here
+        // Overflow gives inf and underflow gives 0 (a subnormal result is kept): both are rejected here.
+        if (*end == 0 && std::isfinite(v) && (v != 0 || !nonzero)) return v;
     }
     throw RpnError{ FormatMsg(M_ERR_BAD_NUMBER, s) };
 }
@@ -379,13 +393,56 @@ static Item ParseBased(const std::wstring& s)
     return Item{ neg ? -v : v, base };
 }
 
-// Snapshot restored by UNDO: the stack and the angle mode.
-struct EngineState
+// n! for n in 0..170, rounded to the nearest double. The product is computed with exact integer arithmetic (32-bit
+// limbs; 170! has 1019 bits) and rounded once at the end, so the result depends neither on the C runtime's gamma
+// function nor on the precision mode of the FPU: it is exact for n <= 22 (22! is the largest factorial that a double
+// holds exactly) and is the double nearest to n! for larger n.
+static double Factorial(int n)
 {
-    std::vector<Item> st;
-    bool              deg;
+    unsigned w[33] = { 1 };                      // the product, least significant limb first
+    int len = 1;
+    for (int k = 2; k <= n; k++) {
+        unsigned long long carry = 0;
+        for (int i = 0; i < len; i++) {
+            const unsigned long long p = (unsigned long long)w[i] * (unsigned)k + carry;
+            w[i] = (unsigned)p;
+            carry = p >> 32;
+        }
+        if (carry) w[len++] = (unsigned)carry;
+    }
+    const auto bit = [&w](int j) { return (w[j >> 5] >> (j & 31)) & 1u; };
+    int bits = 32 * len;
+    while (!bit(bits - 1)) bits--;               // length of the product in bits (it is never 0)
+
+    unsigned long long mant = 0;                 // the leading 53 bits, or all the bits if there are fewer
+    for (int j = bits - 1; j >= 0 && j >= bits - 53; j--) mant = (mant << 1) | bit(j);
+    if (bits <= 53) return (double)mant;         // exact
+
+    if (bit(bits - 54)) {                        // first discarded bit set: round up, unless it is a tie and mant is even
+        bool sticky = false;
+        for (int j = bits - 55; j >= 0 && !sticky; j--) sticky = bit(j) != 0;
+        if (sticky || (mant & 1)) mant++;
+    }
+    return std::ldexp((double)mant, bits - 53);  // mant <= 2^53 is exact in a double
+}
+
+// One undo step: what is needed to take back one command (see Engine::Token and Engine::Undo).
+// Every command except clr, sum and avg changes at most the top kTouched levels of the stack, and the depth of the
+// stack, so for them a step keeps only those levels: recording a step costs the same on an empty stack and on a
+// stack of 10000 entries. clr, sum and avg can change every level: their step keeps the whole stack (see
+// Engine::WholeStack). A new command that changes deeper levels must be listed there as well.
+static const size_t kTouched = 3;
+
+struct UndoStep
+{
+    bool              deg = false;          // angle mode before the command
+    size_t            depth = 0;            // number of entries before the command
+    size_t            nTop = 0;             // valid entries of top: min(depth, kTouched)
+    Item              top[kTouched] = {};   // the top levels before the command, deepest first
+    bool              whole = false;        // all holds the whole stack, and top is not used
+    std::vector<Item> all;
 };
-typedef std::shared_ptr<const EngineState> StatePtr;
+typedef std::shared_ptr<const UndoStep> StatePtr;
 
 // Ids of the unary functions (see Engine::Unary).
 enum UOp {
@@ -403,22 +460,29 @@ public:
     // Evaluates a line of white-space separated tokens. Returns false and sets err on failure;
     // in that case the stack, the angle mode and the undo history are rolled back to their
     // state before the call, so a line is applied atomically.
+    // Any other exception (std::bad_alloc: memory exhausted) cancels the line in the same way and then goes on to
+    // the caller: the engine is never left half way through a line.
     bool Eval(const std::wstring& line, std::wstring& err)
     {
-        const std::vector<Item> backup = st;
+        // The copies are made before anything is changed: if making them fails, nothing has to be undone.
+        std::vector<Item> backup = st;
+        std::vector<StatePtr> backupHist = hist;   // the steps are shared, so copying the vector is cheap
         const bool backupDeg = deg;
-        const std::vector<StatePtr> backupHist = hist;   // snapshots are shared, so copying the vector is cheap
         try {
             for (const std::wstring& tok : Split(line)) Token(tok);
             return true;
         } catch (const RpnError& e) {
-            st = backup;
-            deg = backupDeg;
-            hist = backupHist;
+            Rollback(backup, backupDeg, backupHist);
             err = e.msg;
             return false;
+        } catch (...) {
+            Rollback(backup, backupDeg, backupHist);
+            throw;
         }
     }
+
+    // True if nothing has been calculated yet: empty stack, radians, no undo history.
+    bool Pristine() const { return st.empty() && !deg && hist.empty(); }
 
 private:
     static constexpr double kPi = 3.14159265358979323846;
@@ -444,9 +508,12 @@ private:
 
     // Noise suppression for sin/cos/tan. Near a zero of the function the computed result is
     // rounding noise of the argument (cos(pi/2) = 6.1e-17). If |r| is below four ULPs of the
-    // argument a, the result carries no information and 0 is returned. Not applied for |a| >= 1e9,
-    // where the argument's own resolution is too coarse for the test to mean anything. A small
-    // result of a small argument (sin(1e-16)) is far above that threshold and is kept.
+    // argument a, the result is not larger than the uncertainty that the argument itself carries
+    // (a double near pi is only known to about one ULP) and 0 is returned. This is a deliberate
+    // choice, and a result that really is that small is lost with it: sin(3.1415926535897936) is
+    // -3.2e-16 and gives 0. It is documented in the help and in RPNCalc.txt. Not applied for
+    // |a| >= 1e9, where the argument's own resolution is too coarse for the test to mean anything.
+    // A small result of a small argument (sin(1e-16)) is far above that threshold and is kept.
     static double Snap(double r, double a)
     {
         a = std::fabs(a);
@@ -482,33 +549,70 @@ private:
         if (std::fabs(x) > kMaxInt) throw RpnError{ GetMsg(M_ERR_INT_TOO_LARGE) };
     }
 
-    // Element-wise equality of two stacks: value (including the sign of zero) and display base.
+    // Equality of two entries: value (including the sign of zero) and display base.
+    static bool SameItem(const Item& a, const Item& b)
+    {
+        return a.v == b.v && std::signbit(a.v) == std::signbit(b.v) && a.base == b.base;
+    }
+
+    // Element-wise equality of two stacks.
     static bool SameItems(const std::vector<Item>& a, const std::vector<Item>& b)
     {
         if (a.size() != b.size()) return false;
         for (size_t i = 0; i < a.size(); i++)
-            if (a[i].v != b[i].v || std::signbit(a[i].v) != std::signbit(b[i].v) || a[i].base != b[i].base)
-                return false;
+            if (!SameItem(a[i], b[i])) return false;
         return true;
     }
 
-    // Appends a snapshot to the undo history, dropping the oldest one beyond kUndoDepth.
+    // Puts back the state saved by Eval. It only swaps, so it cannot fail, not even when memory is exhausted.
+    void Rollback(std::vector<Item>& savedStack, bool savedDeg, std::vector<StatePtr>& savedHist) noexcept
+    {
+        st.swap(savedStack);
+        deg = savedDeg;
+        hist.swap(savedHist);
+    }
+
+    // Appends a step to the undo history, dropping the oldest one beyond kUndoDepth.
     void Remember(const StatePtr& s)
     {
         hist.push_back(s);
         if (hist.size() > kUndoDepth) hist.erase(hist.begin());
     }
 
-    // Restores the most recent snapshot and removes it from the history.
+    // Takes back the most recent step and removes it from the history. The state at this point is the one the
+    // command left, so for a step with a partial record the entries below the recorded levels are the original ones.
     void Undo()
     {
         if (hist.empty()) throw RpnError{ GetMsg(M_ERR_NO_UNDO) };
-        st  = hist.back()->st;
-        deg = hist.back()->deg;
+        const UndoStep& s = *hist.back();
+        if (s.whole) {
+            st = s.all;
+        } else {
+            st.resize(s.depth - s.nTop);                       // the levels below the recorded ones are unchanged
+            st.insert(st.end(), s.top, s.top + s.nTop);        // put the recorded levels back
+        }
+        deg = s.deg;
         hist.pop_back();
     }
 
-    // Executes one token. A snapshot is taken before the token runs and is recorded as an undo step
+    // The commands that can change any level of the stack, not only the top kTouched ones (see UndoStep).
+    // t is the lower-cased token.
+    static bool WholeStack(const std::wstring& t)
+    {
+        return t == L"clr" || t == L"clear" || t == L"sum" || t == L"avg";
+    }
+
+    // True if the command that left the stack as it is now changed it, or the angle mode, with respect to step s.
+    bool Changed(const UndoStep& s) const
+    {
+        if (deg != s.deg || st.size() != s.depth) return true;
+        if (s.whole) return !SameItems(st, s.all);
+        for (size_t i = 0; i < s.nTop; i++)
+            if (!SameItem(st[st.size() - s.nTop + i], s.top[i])) return true;
+        return false;
+    }
+
+    // Executes one token. What the token can change is saved first, and is recorded as an undo step
     // only if the token changed the stack or the angle mode. "undo" itself is never recorded.
     void Token(const std::wstring& raw)
     {
@@ -517,9 +621,18 @@ private:
 
         if (t == L"undo") { Undo(); return; }
 
-        const StatePtr before(std::make_shared<EngineState>(EngineState{ st, deg }));
+        const std::shared_ptr<UndoStep> step(std::make_shared<UndoStep>());
+        step->deg   = deg;
+        step->depth = st.size();
+        if (WholeStack(t)) {
+            step->whole = true;
+            step->all   = st;
+        } else {
+            step->nTop = std::min(st.size(), kTouched);
+            std::copy(st.end() - step->nTop, st.end(), step->top);
+        }
         Execute(raw, t);
-        if (deg != before->deg || !SameItems(st, before->st)) Remember(before);
+        if (Changed(*step)) Remember(step);
     }
 
     // Dispatches a token: based integer, decimal number, then binary operator, unary function or
@@ -559,8 +672,10 @@ private:
         case 5: r = std::pow(a, b); break;
         case 6: if (b == 0) throw RpnError{ GetMsg(M_ERR_DIV_ZERO) }; r = std::fmod(a, b); break;   // sign follows the dividend
         case 7: r = FromRad(std::atan2(a, b)); break;   // atan2(Y, X)
-        case 8: r = std::min(a, b); break;
-        case 9: r = std::max(a, b); break;
+        // Equal values are not always the same value: -0 is taken as smaller than +0, whatever the order of the
+        // operands (std::min and std::max would return the first one, so the sign of a zero would depend on the order).
+        case 8: r = (a == b) ? (std::signbit(a) ? a : b) : std::min(a, b); break;
+        case 9: r = (a == b) ? (std::signbit(a) ? b : a) : std::max(a, b); break;
         }
         Push(r);
         return true;
@@ -606,9 +721,9 @@ private:
         case U_SINH:  r = std::sinh(x); break;
         case U_COSH:  r = std::cosh(x); break;
         case U_TANH:  r = std::tanh(x); break;
-        case U_FACT:  // 170! is the largest factorial that fits in a double; tgamma(x + 1) is rounded to the nearest integer
+        case U_FACT:  // 170! is the largest factorial that fits in a double; see Factorial for the accuracy
             if (x < 0 || x != std::floor(x) || x > 170) throw RpnError{ GetMsg(M_ERR_FACTORIAL) };
-            r = std::round(std::tgamma(x + 1.0));
+            r = Factorial((int)x);
             break;
         case U_FLOOR: r = std::floor(x); break;
         case U_CEIL:  r = std::ceil(x); break;
@@ -645,7 +760,7 @@ private:
 // ==================== global state ====================
 static Engine       g_eng;                    // single engine shared by the dialog and the command line
 static std::wstring g_err;                    // message of the last failed Run, empty on success
-static bool         g_loaded = false;         // the settings have been read
+static bool         g_loaded = false;         // the stored state has been read (or found empty) and applied: only then can it be saved
 static bool         g_insertToCmdLine = false;   // set by Ctrl+Enter: insert X into the command line after the dialog closes
 
 // Evaluates a line on the global engine; the error text, if any, is left in g_err.
@@ -680,48 +795,71 @@ static FarSettingsItem MakeSetting(const wchar_t* name, FARSETTINGSTYPES type)
     return it;
 }
 
-// Loads the stack and the angle mode once per session. The stack is stored as a string of
+// The settings storage, open for the lifetime of the object: the destructor releases the handle, so it cannot be
+// leaked by an exception. h is nullptr if Far could not open the storage.
+struct SettingsHandle
+{
+    HANDLE h;
+    SettingsHandle() : h(SettingsOpen()) {}
+    ~SettingsHandle() { if (h) PSI.SettingsControl(h, SCTL_FREE, 0, nullptr); }
+    SettingsHandle(const SettingsHandle&) = delete;
+    SettingsHandle& operator=(const SettingsHandle&) = delete;
+};
+
+// Loads the stack and the angle mode, once per session. The stack is stored as a string of
 // space-separated tokens in the same syntax the parser accepts; unreadable tokens are skipped.
+// A state that is not there yet (first run) is a normal result and ends the loading. If Far cannot open the
+// settings nothing is lost: the plug-in works on an empty stack, SaveState does not overwrite what it could not
+// read, and the next use tries again. A state read late is applied only if nothing has been calculated in the
+// meantime; otherwise it would be mixed up with the new entries, so it is left alone (and nothing is saved over it).
 static void LoadState()
 {
     if (g_loaded) return;
-    g_loaded = true;
 
-    HANDLE h = SettingsOpen();
-    if (!h) return;
+    SettingsHandle s;
+    if (!s.h) return;
 
-    FarSettingsItem s = MakeSetting(L"Stack", FST_STRING);
-    if (PSI.SettingsControl(h, SCTL_GET, 0, &s) && s.String) {
-        for (const std::wstring& tok : Split(s.String)) {
-            if (g_eng.st.size() >= kMaxStack) break;
-            try { g_eng.st.push_back(tok.find(L'#') != std::wstring::npos ? ParseBased(tok) : Item{ ParseNum(tok), 0 }); } catch (const RpnError&) {}
+    std::vector<Item> stack;     // read aside: if anything fails (out of memory) the engine and g_loaded are untouched
+    bool deg = false;
+
+    FarSettingsItem it = MakeSetting(L"Stack", FST_STRING);
+    if (PSI.SettingsControl(s.h, SCTL_GET, 0, &it) && it.String) {
+        for (const std::wstring& tok : Split(it.String)) {
+            if (stack.size() >= kMaxStack) break;
+            try { stack.push_back(tok.find(L'#') != std::wstring::npos ? ParseBased(tok) : Item{ ParseNum(tok), 0 }); } catch (const RpnError&) {}
         }
     }
     FarSettingsItem d = MakeSetting(L"Degrees", FST_QWORD);
-    if (PSI.SettingsControl(h, SCTL_GET, 0, &d)) g_eng.deg = d.Number != 0;
+    if (PSI.SettingsControl(s.h, SCTL_GET, 0, &d)) deg = d.Number != 0;
 
-    PSI.SettingsControl(h, SCTL_FREE, 0, nullptr);
+    if (!g_eng.Pristine()) return;
+    g_eng.st.swap(stack);
+    g_eng.deg = deg;
+    g_loaded = true;
 }
 
 // Writes the stack (bottom first, in FormatSave form) and the angle mode to the settings.
-// The undo history is not persisted.
-static void SaveState()
+// The undo history is not persisted. Returns false if they could not be written: the settings could not be opened,
+// Far refused a value, or the stored state was never read (see LoadState), so overwriting it would lose it.
+static bool SaveState()
 {
-    HANDLE h = SettingsOpen();
-    if (!h) return;
+    if (!g_loaded) return false;
 
-    std::wstring text;
+    std::wstring text;           // built before the settings are opened
     for (const Item& it : g_eng.st) { text += FormatSave(it); text += L' '; }
+
+    SettingsHandle h;
+    if (!h.h) return false;
 
     FarSettingsItem s = MakeSetting(L"Stack", FST_STRING);
     s.String = text.c_str();
-    PSI.SettingsControl(h, SCTL_SET, 0, &s);
+    const bool okStack = PSI.SettingsControl(h.h, SCTL_SET, 0, &s) != 0;
 
     FarSettingsItem d = MakeSetting(L"Degrees", FST_QWORD);
     d.Number = g_eng.deg ? 1 : 0;
-    PSI.SettingsControl(h, SCTL_SET, 0, &d);
+    const bool okDeg = PSI.SettingsControl(h.h, SCTL_SET, 0, &d) != 0;
 
-    PSI.SettingsControl(h, SCTL_FREE, 0, nullptr);
+    return okStack && okDeg;
 }
 
 // ==================== dialog ====================
@@ -937,8 +1075,15 @@ static FarDialogItem MakeItem(FARDIALOGITEMTYPES type, int x1, int y1, int x2, i
     return it;
 }
 
+// Shows a message box with one OK button. text holds the title and then the lines, separated by '\n' (FMSG_ALLINONE:
+// the Items argument of Message is then a single string); help is the topic that F1 opens in the box.
+static void ShowBox(const std::wstring& text, unsigned long long flags, const wchar_t* help)
+{
+    PSI.Message(&PluginGuid, &MsgGuid, flags | FMSG_MB_OK | FMSG_ALLINONE, help, (const wchar_t* const*)text.c_str(), 0, 0);
+}
+
 // Runs the modal calculator dialog, saves the state on exit and, if requested with Ctrl+Enter,
-// inserts X into the Far command line.
+// inserts X into the Far command line. What cannot be done is reported in a message box, since the dialog is gone.
 static void ShowCalculator()
 {
     LoadState();
@@ -964,12 +1109,16 @@ static void ShowCalculator()
         PSI.DialogRun(h);
         PSI.DialogFree(h);
     }
-    SaveState();
+    const bool saved = SaveState();
 
     if (g_insertToCmdLine && !g_eng.st.empty()) {
-        std::wstring v = FormatExact(g_eng.st.back());
-        PSI.PanelControl(PANEL_ACTIVE, FCTL_INSERTCMDLINE, 0, (void*)v.c_str());
+        const std::wstring v = FormatExact(g_eng.st.back());
+        // Far answers 0 if it does not insert the text. The value is shown, so that closing the dialog does not lose it.
+        if (!PSI.PanelControl(PANEL_ACTIVE, FCTL_INSERTCMDLINE, 0, (void*)v.c_str()))
+            ShowBox(std::wstring(GetMsg(M_TITLE)) + L"\n" + GetMsg(M_ERR_CMDLINE) + L"\n" + FormatMsg(M_RESULT, v),
+                    FMSG_WARNING, HELP_ERRORS);
     }
+    if (!saved) ShowBox(std::wstring(GetMsg(M_TITLE)) + L"\n" + GetMsg(M_ERR_SAVE), FMSG_WARNING, HELP_ERRORS);
 }
 
 // ==================== rpn: <expression> ====================
@@ -984,7 +1133,7 @@ static void RunCommandLine(const wchar_t* cl)
     if (line.size() >= 4 && _wcsnicmp(line.c_str(), L"rpn:", 4) == 0) line = Trim(line.substr(4));   // the prefix may or may not be included
 
     std::wstring text;
-    unsigned long long flags = FMSG_MB_OK | FMSG_ALLINONE;
+    unsigned long long flags = 0;
     if (Run(line)) {
         text = std::wstring(GetMsg(M_TITLE)) + L"\n";
         if (g_eng.st.empty()) {
@@ -993,13 +1142,16 @@ static void RunCommandLine(const wchar_t* cl)
             text += FormatMsg(M_RESULT, FormatItem(g_eng.st.back()));
             text += L"\n" + FormatMsg(M_STACK_DEPTH, Utow(g_eng.st.size()));
         }
-        SaveState();
+        if (!SaveState()) {      // the result is still shown, with a warning line
+            text += L"\n";
+            text += GetMsg(M_ERR_SAVE);
+            flags |= FMSG_WARNING;
+        }
     } else {
         text = std::wstring(GetMsg(M_TITLE)) + L"\n" + g_err;
         flags |= FMSG_WARNING;
     }
-    // With FMSG_ALLINONE the Items argument is a single string with lines separated by '\n'.
-    PSI.Message(&PluginGuid, &MsgGuid, flags, HELP_CMDLINE, (const wchar_t* const*)text.c_str(), 0, 0);
+    ShowBox(text, flags, HELP_CMDLINE);
 }
 
 // ==================== plugin exports ====================
