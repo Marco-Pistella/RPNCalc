@@ -352,6 +352,7 @@ Windows command prompt, in the folder of the project:
     build.bat x64      builds .\x64\RPNCalc.dll (64 bit)
     build.bat x86      builds .\X86\RPNCalc.dll (32 bit)
     build.bat noupx    does not compress the DLLs (can be combined with x64 or x86)
+    build.bat max      UPX also tries --ultra-brute: much slower, smallest result (not with noupx)
     build.bat zip      also creates RPNCalc-<version>.zip (for example RPNCalc-1.0.1.zip), with
                        the folders built, RPNCalc.txt, CHANGELOG.TXT and LICENSE (needs tar.exe,
                        which is part of Windows 10 and later)
@@ -379,9 +380,13 @@ copied into the Far plug-ins folder.
     PluginSDK\Headers.c folder of an installed Far; if it is not found, it is downloaded once with
     curl from the official Far Manager repository, into the folder of the project.
   - UPX is used when upx.exe is found (the MSYS2 folders or the PATH); it roughly halves the size
-    of the DLLs. It is not installed by build.bat, which prints the package for the environment in
-    use (mingw-w64-x86_64-upx, mingw-w64-ucrt-x86_64-upx or mingw-w64-i686-upx). Some antivirus
-    programs are suspicious of UPX-packed files: use "noupx" for a DLL that is not packed.
+    of the DLLs (options --best --lzma), and build.bat shows the size before and after. It is not
+    installed by build.bat, which prints the package for the environment in use
+    (mingw-w64-x86_64-upx, mingw-w64-ucrt-x86_64-upx or mingw-w64-i686-upx). With "max" UPX also
+    tries --ultra-brute: many more variants and a much longer time, for the smallest result that
+    UPX can find; the gain over the normal mode may be small. "max" cannot be used with "noupx".
+    Some antivirus programs are suspicious of UPX-packed files: use "noupx" for a DLL that is not
+    packed.
   - Both DLLs are linked with -Wl,--kill-at: in the 32 bit one, the stdcall exports get the
     undecorated names that Far looks for. After linking, build.bat checks with objdump that
     GetGlobalInfoW, SetStartupInfoW, GetPluginInfoW and OpenW are exported with those names, and

@@ -10,8 +10,8 @@ The newest version comes first. The version number is the one that Far shows for
 VERSION 1.0.1
 ----------------------------------------------------------------------------------------------------
 
-A correction release: no new command and no new key in the plug-in (build.bat has three additions,
-items 12 to 14). It follows a review of the source of 1.0.0. Every point of the review was checked
+A correction release: no new command and no new key in the plug-in (build.bat has four additions,
+items 12 to 15). It follows a review of the source of 1.0.0. Every point of the review was checked
 against the code, and the defects were reproduced with tests before anything was changed. Points
 that are a matter of taste, or that are limits of the double precision numbers, were left as they
 are (see "Reviewed and left unchanged" below).
@@ -115,14 +115,20 @@ Build script
  14. build.bat zip: the package now contains CHANGELOG.TXT as well (the build stops with an
      error if the file is missing).
 
+ 15. build.bat max: a new switch, optional (without it nothing changes). UPX is run with
+     --best --ultra-brute --lzma instead of --best --lzma: it tries many more variants, takes
+     much longer (the script says so) and keeps the smallest result it finds; the gain over the
+     normal mode may be small. "max" cannot be used with "noupx". In both modes the script now
+     shows the size of the DLL before and after the packing.
+
 Files that changed
 
- 15. rpncalc.cpp: the corrections above; version 1.0.1 (PLUGIN_VER_PATCH).
+ 16. rpncalc.cpp: the corrections above; version 1.0.1 (PLUGIN_VER_PATCH).
      rpncalc.rc: version 1.0.1 (VER_PATCH, VER_STRING).
      RPNCalcEng.lng: the two new messages.
      RPNCalcEng.hlf, RPNCalc.txt, readme.md: the changes of behaviour described above, the new
      messages, the structure of the engine, the build script.
-     build.bat: items 12, 13 and 14.
+     build.bat: items 12 to 15.
      CHANGELOG.TXT: new.
 
 Reviewed and left unchanged
@@ -145,8 +151,10 @@ How it was checked
      were run against a simulated Far, including the failure of each call.
      build.bat could not be run (the checks were made on Linux, without Windows). Its changes were
      checked with a script (labels, line endings, characters) and read line by line by a second
-     reviewer, who also followed by hand the cases of the new menu: a choice, 0, answers that are
-     not valid, the end of the input, a failure of pacman, an unknown environment.
+     reviewer, who also followed by hand the cases of the new menu (a choice, 0, answers that are
+     not valid, the end of the input, a failure of pacman, an unknown environment) and the command
+     lines with "max". UPX was not available: the size obtained with "max" was not compared with
+     the one of the normal packing.
 
 
 VERSION 1.0.0

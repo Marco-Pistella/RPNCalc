@@ -9,6 +9,7 @@ rem    build.bat            builds both versions
 rem    build.bat x64        builds only the 64-bit version, into .\x64
 rem    build.bat x86        builds only the 32-bit version, into .\X86
 rem    build.bat noupx      (with or without x64/x86) skips the UPX packing step
+rem    build.bat max        (with or without x64/x86) UPX also tries --ultra-brute: much slower, smallest DLL
 rem    build.bat zip        (with or without the others) also creates RPNCalc-<version>.zip (for example RPNCalc-1.0.1.zip), with the
 rem                         DLL folders that were built, RPNCalc.txt, CHANGELOG.TXT and LICENSE; needs tar.exe (Windows 10+)
 rem
@@ -35,8 +36,10 @@ rem
 rem  Version: the build stops if the version in rpncalc.rc (VER_MAJOR ... VER_STRING) differs from the
 rem  PLUGIN_VER_* values at the top of rpncalc.cpp. Uses the find.exe of Windows (not the one of MSYS2).
 rem
-rem  UPX: when upx.exe is found (PATH or MSYS2) the DLLs are packed with it, which roughly halves
-rem  their size. Use "noupx" for a plain DLL.
+rem  UPX: when upx.exe is found (PATH or MSYS2) the DLLs are packed with it (--best --lzma), which
+rem  roughly halves their size; the size before and after is shown. Use "noupx" for a plain DLL.
+rem  With "max" UPX also tries --ultra-brute: many more variants, much slower, and the smallest result
+rem  that it finds. "max" and "noupx" cannot be used together.
 rem ============================================================================================
 setlocal EnableExtensions DisableDelayedExpansion
 pushd "%~dp0"
@@ -56,14 +59,17 @@ set "DO64="
 set "DO32="
 set "USEUPX=1"
 set "DOZIP="
+set "UPXMAX="
 :args
 if "%~1"=="" goto args_done
 if /i "%~1"=="x64"   set "DO64=1" & shift & goto args
 if /i "%~1"=="x86"   set "DO32=1" & shift & goto args
 if /i "%~1"=="noupx" set "USEUPX=0" & shift & goto args
+if /i "%~1"=="max"   set "UPXMAX=1" & shift & goto args
 if /i "%~1"=="zip"   set "DOZIP=1" & shift & goto args
 goto usage
 :args_done
+if "%USEUPX%"=="0" if defined UPXMAX echo ERROR: "max" and "noupx" cannot be used together. & goto usage
 if not defined DO64 if not defined DO32 set "DO64=1" & set "DO32=1"
 if not defined ENV64 set "ENV64=mingw64 ucrt64"
 if not defined ENV32 set "ENV32=mingw32"
@@ -142,11 +148,12 @@ popd
 exit /b 0
 
 :usage
-echo Usage: build.bat [x64] [x86] [noupx] [zip]
+echo Usage: build.bat [x64] [x86] [noupx] [max] [zip]
 echo   no option  builds both versions
 echo   x64        builds only the 64-bit DLL into .\x64
 echo   x86        builds only the 32-bit DLL into .\X86
 echo   noupx      does not pack the DLLs with UPX ^(UPX is used when upx.exe is found^)
+echo   max        UPX also tries --ultra-brute: the smallest DLL, but much slower ^(not with noupx^)
 echo   zip        also creates RPNCalc-^<version^>.zip ^(needs tar.exe, Windows 10 or later^)
 popd
 exit /b 1
@@ -195,8 +202,13 @@ set "UPXEXE="
 for %%P in ("%BIN%" "%MSYS2_ROOT%\ucrt64\bin" "%MSYS2_ROOT%\mingw64\bin" "%MSYS2_ROOT%\mingw32\bin" "%MSYS2_ROOT%\usr\bin") do if not defined UPXEXE if exist "%%~P\upx.exe" set "UPXEXE=%%~P\upx.exe"
 if not defined UPXEXE for %%U in (upx.exe) do if not "%%~$PATH:U"=="" set "UPXEXE=%%~$PATH:U"
 if not defined UPXEXE goto no_upx
-"%UPXEXE%" --best --lzma -q "%OUT%\RPNCalc.dll"
-if errorlevel 1 echo [%ARCH%] warning: UPX failed, the DLL is left unpacked.
+set "UPXOPT=--best --lzma"
+if defined UPXMAX set "UPXOPT=--best --ultra-brute --lzma"
+if defined UPXMAX echo [%ARCH%] packing with UPX %UPXOPT%, this can take a long time ...
+for %%F in ("%OUT%\RPNCalc.dll") do set "SIZE0=%%~zF"
+"%UPXEXE%" %UPXOPT% -q "%OUT%\RPNCalc.dll"
+if not "%errorlevel%"=="0" echo [%ARCH%] warning: UPX failed, the DLL is left unpacked. & goto copy_files
+for %%F in ("%OUT%\RPNCalc.dll") do echo [%ARCH%] UPX: %SIZE0% bytes before, %%~zF bytes after.
 goto copy_files
 :no_upx
 set "UPXPKG=mingw-w64-ucrt-x86_64-upx"

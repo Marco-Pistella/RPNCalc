@@ -196,6 +196,7 @@ build.bat          builds both versions, compressed with UPX when it is found
 build.bat x64      builds .\x64\RPNCalc.dll (64 bit)
 build.bat x86      builds .\X86\RPNCalc.dll (32 bit)
 build.bat noupx    does not compress the DLLs (can be combined with x64 or x86)
+build.bat max      UPX also tries --ultra-brute: much slower, the smallest result (not with noupx)
 build.bat zip      also creates RPNCalc-<version>.zip, for example RPNCalc-1.0.1.zip, with the folders built, RPNCalc.txt, CHANGELOG.TXT and LICENSE
 ```
 
@@ -203,7 +204,7 @@ build.bat zip      also creates RPNCalc-<version>.zip, for example RPNCalc-1.0.1
 
 - **Compilers.** The 64 bit DLL is built with the g++ of the MSYS2 environment `mingw64` or, if it is missing, `ucrt64`; the 32 bit DLL with the one of `mingw32` (the environments tried can be set with `ENV64` and `ENV32`). If the compiler of a DLL is missing, `build.bat` lists the compilers it can install with `pacman` (`mingw-w64-x86_64-gcc` and `mingw-w64-ucrt-x86_64-gcc` for the 64 bit DLL, `mingw-w64-i686-gcc` for the 32 bit one) and asks which one to install, or none. With none, with an answer that is not valid, or if `pacman` fails, the build of that DLL stops with an error. Nothing is installed without that answer. If MSYS2 itself is not found, `build.bat` only says where to download it. A DLL built with `mingw64` needs only `msvcrt.dll`; one built with `ucrt64` needs the UCRT (Windows 10, or 7/8.1 with the update). MSYS2 has deprecated `mingw64` and is phasing out `mingw32` (see <https://www.msys2.org/docs/environments/>), so those packages may disappear.
 - **plugin.hpp.** The Far 3 header is taken from the folder of the project, from the folder `FARSDK` (default `.\PluginSDK`) or from the `PluginSDK\Headers.c` folder of an installed Far. If it is not found, it is downloaded once with `curl` from the official Far Manager repository, into the folder of the project.
-- **UPX.** Used when `upx.exe` is found (the MSYS2 folders or the `PATH`). Some antivirus programs are suspicious of UPX-packed files: use `noupx` for a DLL that is not packed.
+- **UPX.** Used when `upx.exe` is found (the MSYS2 folders or the `PATH`), with `--best --lzma`; `build.bat` shows the size before and after. With `max` UPX also tries `--ultra-brute`: many more variants and a much longer time, for the smallest result UPX can find; the gain over the normal mode may be small, and `max` cannot be used with `noupx`. Some antivirus programs are suspicious of UPX-packed files: use `noupx` for a DLL that is not packed.
 - **Version.** `build.bat` stops if the version in `rpncalc.rc` differs from the `PLUGIN_VER_*` values at the top of `rpncalc.cpp`.
 - **Exports.** Both DLLs are linked with `-Wl,--kill-at`. After linking, `build.bat` checks with `objdump` that `GetGlobalInfoW`, `SetStartupInfoW`, `GetPluginInfoW` and `OpenW` are exported with undecorated names.
 
