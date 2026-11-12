@@ -106,3 +106,11 @@
 
 // M_ERR_FATAL: message box shown when the plug-in cannot run at all (its title is M_TITLE)
 "Out of memory or internal error"
+
+// M_ERR_SAVE: message box (its title is M_TITLE): the stack and the angle mode could not be saved in the Far settings.
+// It is shown after the dialog is closed, or as the last line of the message box of "rpn:" (new in 1.0.1)
+"Cannot save the stack and the angle mode in the Far settings"
+
+// M_ERR_CMDLINE: message box (its title is M_TITLE) shown when Far does not insert X into the command line after Ctrl+Enter;
+// the line below it is the value of X, made with M_RESULT, so that it is not lost (new in 1.0.1)
+"Cannot insert X into the command line"

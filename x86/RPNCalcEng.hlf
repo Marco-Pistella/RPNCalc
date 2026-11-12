@@ -38,6 +38,11 @@ $ #Dialog and keys#
                           insert X into the Far command line,
                           with all the digits it needs. On an empty
                           line it does not DUP: it only inserts X.
+                          If the stack is empty (the line was
+                          clr, for example) the dialog stays open
+                          and the line is cleared, as with Enter.
+                          If Far does not insert the text, a
+                          message box shows X.
    #+  *  /  ^#             Empty line: apply the operator at once.
    #Backspace#              Empty line: DROP (remove X).
    #Del#                    Empty line: CLR (clear the whole stack).
@@ -74,8 +79,9 @@ $ #Numbers and constants#
    not exceed 2^53 = 9007199254740992. See ~Number bases~@Bases@.
 
    A decimal number too large for a double is rejected (Invalid
-   number). One too small to be represented as a non-zero
-   double underflows to 0; subnormal values are accepted.
+   number). So is one that is not zero but too small to be
+   represented: it would be read as 0. Subnormal values (down to
+   about 5e-324) are accepted, and so are 0 and -0.
 
    Constants: #pi# and #e# push the constant on the stack.
 
@@ -96,6 +102,8 @@ $ #Binary operators#
                           signs select the quadrant. The result
                           is in the current ~angle mode~@Angles@.
    #min#  #max#               The smaller / the larger of Y and X.
+                          For equal values, -0 is taken as
+                          smaller than +0, whatever the order.
 
    Division by zero (/, %, mod) is an error.
 
@@ -116,16 +124,25 @@ $ #Functions#
    #log#                    Base 10 logarithm (X must be > 0).
    #log2#                   Base 2 logarithm (X must be > 0).
    #sin#  #cos#  #tan#          X is in the current ~angle mode~@Angles@.
-                          A result below the resolution of the
-                          argument, like cos(pi/2) or sin(pi),
-                          is replaced by exactly 0. Small results
+                          A result smaller than four units in the
+                          last place of the argument (about as
+                          much as the argument is known to), like
+                          cos(pi/2) or sin(pi), is replaced by
+                          exactly 0, even if the function really
+                          has a tiny value there. Not applied
+                          when |X| is 1e9 or more. Small results
                           of small arguments are kept.
+                          tan gives no error at its poles: for
+                          example 90 deg tan gives a very large
+                          number (about 1.6e16).
    #asin#  #acos#             X must be in -1..1. The result is in
                           the current angle mode.
    #atan#                   Arc tangent, in the current angle mode.
    #sinh#  #cosh#  #tanh#       Hyperbolic functions (not affected
                           by the angle mode).
    #fact#                   Factorial (X an integer, 0..170).
+                          Exact up to 22!; beyond that, the
+                          nearest double.
    #floor#                  Largest integer not greater than X.
    #ceil#                   Smallest integer not less than X.
    #round#                  Nearest integer (halves away from 0).
@@ -222,7 +239,9 @@ $ #Command line (rpn: prefix)#
    between sessions.
 
    If the line contains an error, the error is reported and the
-   stack is left as it was.
+   stack is left as it was. If the result cannot be saved in the
+   Far settings, the last line of the box says so (see
+   ~Errors and persistence~@Errors@).
 
    To copy X from the dialog to the command line, press
    Ctrl+Enter.
@@ -251,7 +270,8 @@ $ #Errors and persistence#
    #Unknown command: ...#
       The token is neither a number nor a command.
    #Invalid number: ...#
-      The token is not a valid number.
+      The token is not a valid number, or it is too large for a
+      double, or it is not zero but too small to be represented.
    #Invalid digit for the base: ...#
       A digit not allowed in the base, for example 12##B.
    #Number too large (max 2^53): ...#
@@ -265,10 +285,24 @@ $ #Errors and persistence#
    #Argument out of range (-1..1)#
       asin or acos with X outside -1..1.
    #Factorial needs an integer 0-170#
+   #Cannot save the stack and the angle mode in the Far settings#
+      Far did not accept the values, or the settings could not be
+      opened, or the stored stack could not be read when the
+      plugin was first used (it is then never overwritten). The
+      calculator goes on working. The message is shown after the
+      dialog is closed, or as the last line of the box of rpn:.
+   #Cannot insert X into the command line#
+      Far did not insert the text after Ctrl+Enter. The box shows
+      the value of X, so that it is not lost.
 
    The stack and the angle mode are saved in the Far settings
    when the dialog is closed and after each successful rpn:
    command, together with the display forms set by bin, hex
    and dec. The undo history is not saved.
+
+   If Far cannot open the settings when the plugin is first used,
+   the calculator works on an empty stack and the stored one is
+   not overwritten: nothing is saved until it has been read. The
+   next use tries again.
 
    ~Contents~@Contents@
