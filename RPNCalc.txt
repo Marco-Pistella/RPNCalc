@@ -327,11 +327,11 @@ Rules for a language file
   - "%s" is replaced by a value (a number, a command, the value of X, an error text): keep it, once,
     in the place where it reads naturally. The comment above each message says what it stands for.
     A text without "%s" is shown as it is.
-  - A new version of the plug-in that needs more messages adds them at the end of the file, so the
-    numbers of the existing ones do not change. A language file made for an earlier version keeps
-    working, but Far reports a bad language file (and the English text is used) when one of the new
-    messages is needed: compare your file with RPNCalcEng.lng and copy the new messages at the end.
-    Version 1.0.1 adds the last two, M_ERR_SAVE and M_ERR_CMDLINE (the file has 29 messages).
+  - New messages are always added at the end of the file, so the numbers of the existing ones do not
+    change. A language file that lacks the last messages keeps working, but Far reports a bad
+    language file (and the English text is used) when one of the missing messages is needed: compare
+    your file with RPNCalcEng.lng and copy the missing messages at the end. The file has 29
+    messages.
 
 What is not translated
 
@@ -345,8 +345,8 @@ The plug-in is a single C++ file, rpncalc.cpp, plus the version resource rpncalc
 author and year, shown in the Details tab of the DLL properties; keep its version equal to the one
 in GetGlobalInfoW, the PLUGIN_VER_* values at the top of the source: build.bat stops if they differ).
 Install MSYS2 (https://www.msys2.org). It is found automatically, usually in C:\msys64; otherwise
-set MSYS2_ROOT. If it is not found, build.bat says so and prints that address. Then, from the
-Windows command prompt, in the folder of the project:
+set MSYS2_ROOT. If it is not found, build.bat offers to install it (see MSYS2 below), or else says
+so and prints that address. Then, from the Windows command prompt, in the folder of the project:
 
     build.bat          builds both versions, compressed with UPX when it is found
     build.bat x64      builds .\x64\RPNCalc.dll (64 bit)
@@ -360,6 +360,21 @@ Windows command prompt, in the folder of the project:
 RPNCalcEng.lng and RPNCalcEng.hlf are copied next to each DLL, so that the folder is ready to be
 copied into the Far plug-ins folder.
 
+  - MSYS2. If MSYS2 is not found, build.bat offers to download and install it, and asks first. The
+    answer 1 downloads the MSYS2 installer (about 85 MB) with curl into the temporary folder, runs
+    it unattended to install MSYS2 into MSYS2_ROOT (C:\msys64 if it is not set), deletes it, updates
+    MSYS2 with pacman (pacman -Syuu, run twice, because the first run can be cut short by an update
+    of MSYS2 itself) and goes on with the build. A new MSYS2 has no compiler yet, so build.bat then
+    asks which one to install, as described in the next item. The answer 0 installs nothing:
+    build.bat says that MSYS2 was not found, prints where to download it (https://www.msys2.org) and
+    stops, as it does if the answer is not valid (three tries, or the input ends) or if the download
+    or the installation fails. Nothing is downloaded or installed without the answer 1. The offer is
+    made only on x64 Windows that has curl.exe, and when the folder for MSYS2 does not exist or is
+    empty; in any other case build.bat only prints the message (and, if the folder is not empty,
+    says that MSYS2 is not installed there). MSYS2 itself needs 64 bit Windows 10 or later. The
+    installer is the "latest" one of https://github.com/msys2/msys2-installer; the variable MSYS2URL
+    can name another one. It is not checked against a checksum, because none is published for the
+    "latest" installer.
   - Compilers. The 64 bit DLL is built with the g++ of the MSYS2 environment mingw64 (the smallest
     DLL) or, if it is missing, ucrt64; the 32 bit DLL with the one of mingw32. The environments
     that are tried can be set with the variables ENV64 and ENV32. If the compiler of a DLL is
@@ -369,7 +384,7 @@ copied into the Far plug-ins folder.
     nothing: the build of that DLL stops with an error, as it does if the answer is not valid
     (three tries, or the input ends) or if pacman fails. pacman downloads the package; an old
     MSYS2 may have to be updated first (pacman -Syu in an MSYS2 shell), and then build.bat run
-    again. If MSYS2 itself is not found, build.bat only says where to download it.
+    again.
   - The package mingw-w64-x86_64-gcc, for the environment mingw64, gives the smallest 64 bit DLL
     and a DLL that needs only msvcrt.dll; a DLL built with ucrt64 needs the UCRT (Windows 10, or
     Windows 7/8.1 with the Universal C Runtime update). MSYS2 has deprecated mingw64 and is

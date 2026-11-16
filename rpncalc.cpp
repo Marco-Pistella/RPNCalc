@@ -142,8 +142,8 @@ enum {
     M_ERR_INTERNAL,
     M_ERR_FATAL,            // message box shown when OpenW itself fails
 
-    M_ERR_SAVE,             // message box: the stack could not be saved in the Far settings (new in 1.0.1)
-    M_ERR_CMDLINE,          // message box: X could not be inserted in the Far command line (new in 1.0.1)
+    M_ERR_SAVE,             // message box: the stack could not be saved in the Far settings
+    M_ERR_CMDLINE,          // message box: X could not be inserted in the Far command line
 
     M_COUNT
 };

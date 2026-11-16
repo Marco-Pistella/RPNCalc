@@ -22,10 +22,18 @@ rem    x86  mingw32
 rem    If the compiler of a DLL is missing the script lists the compilers it can install with pacman
 rem    (mingw-w64-x86_64-gcc and mingw-w64-ucrt-x86_64-gcc for x64, mingw-w64-i686-gcc for x86) and
 rem    asks which one to install, or none: with none the build of that DLL stops with an error.
-rem    If MSYS2 is not found the script prints where to download it: https://www.msys2.org
+rem    If MSYS2 is not found the script offers to download it and to install it unattended (on x64
+rem    Windows that has curl.exe, when the MSYS2 folder is free; MSYS2 itself needs Windows 10 or
+rem    later): the MSYS2 installer is downloaded into the temporary folder, run silently into
+rem    MSYS2_ROOT (default C:\msys64), MSYS2 is updated with pacman and the build goes on. Nothing is
+rem    downloaded or installed unless the answer is 1: with 0 the script only prints where to
+rem    download MSYS2: https://www.msys2.org
 rem
 rem  Optional environment variables:
-rem    MSYS2_ROOT   MSYS2 folder, when it is not C:\msys64 (or on another drive)
+rem    MSYS2_ROOT   MSYS2 folder, when it is not C:\msys64 (or on another drive); it is also the folder
+rem                 where MSYS2 is installed, if the script has to install it
+rem    MSYS2URL     MSYS2 installer that is downloaded when MSYS2 has to be installed (default: the
+rem                 "latest" installer of https://github.com/msys2/msys2-installer)
 rem    ENV64        x64 environments to try, in order     (default: mingw64 ucrt64)
 rem    ENV32        x86 environments to try, in order     (default: mingw32)
 rem    FARSDK       folder that contains Far's plugin.hpp, or its Headers.c subfolder (default: .\PluginSDK)
@@ -73,6 +81,7 @@ if "%USEUPX%"=="0" if defined UPXMAX echo ERROR: "max" and "noupx" cannot be use
 if not defined DO64 if not defined DO32 set "DO64=1" & set "DO32=1"
 if not defined ENV64 set "ENV64=mingw64 ucrt64"
 if not defined ENV32 set "ENV32=mingw32"
+if not defined MSYS2URL set "MSYS2URL=https://github.com/msys2/msys2-installer/releases/download/nightly-x86_64/msys2-x86_64-latest.exe"
 
 rem ---- source files and license ------------------------------------------------------------------
 if not exist "%SRC%" echo ERROR: source file "%SRC%" not found. & goto fail
@@ -120,16 +129,16 @@ goto fail
 :sdk_ok
 
 rem ---- MSYS2 folder ------------------------------------------------------------------------------
+rem MSYSWANT is the folder asked for with MSYS2_ROOT: if MSYS2 has to be installed, it goes there.
+set "MSYSWANT=%MSYS2_ROOT%"
 if defined MSYS2_ROOT if exist "%MSYS2_ROOT%\usr\bin\bash.exe" goto msys_ok
 set "MSYS2_ROOT="
 for %%D in (C D E F G) do if not defined MSYS2_ROOT if exist "%%D:\msys64\usr\bin\bash.exe" set "MSYS2_ROOT=%%D:\msys64"
 if defined MSYS2_ROOT goto msys_ok
 for /f "tokens=2,*" %%A in ('reg query "HKLM\SOFTWARE\Microsoft\Windows\CurrentVersion\Uninstall\MSYS2 64bit" /v InstallLocation 2^>nul ^| find "InstallLocation"') do set "MSYS2_ROOT=%%B"
 if defined MSYS2_ROOT if exist "%MSYS2_ROOT%\usr\bin\bash.exe" goto msys_ok
-echo.
-echo ERROR: MSYS2 was not found. Install it in C:\msys64 or set MSYS2_ROOT to its folder.
-echo        Download it from https://www.msys2.org
-goto fail
+call :msysget
+if errorlevel 1 goto fail
 :msys_ok
 
 rem ---- build -----------------------------------------------------------------------------------
@@ -162,6 +171,83 @@ exit /b 1
 echo.
 echo Build failed.
 popd
+exit /b 1
+
+rem ---- :msysget  MSYS2 was not found: offers to download and install it, or says where to get it -------------
+rem Returns 0 if MSYS2 has been installed (MSYS2_ROOT is set, and MSYSNEW is 1 so that :install knows it) or 1 if not,
+rem with the message printed. Nothing is downloaded or installed unless the answer is 1. The offer is made only on
+rem x64 Windows that has curl.exe, and when the folder is free: in every other case only the message is printed.
+:msysget
+set "MSYSARCH=%PROCESSOR_ARCHITECTURE%"
+if defined PROCESSOR_ARCHITEW6432 set "MSYSARCH=%PROCESSOR_ARCHITEW6432%"
+if /i not "%MSYSARCH%"=="AMD64" goto msysget_manual
+where curl.exe >nul 2>&1
+if errorlevel 1 goto msysget_manual
+set "MSYSDIR=%MSYSWANT%"
+if not defined MSYSDIR set "MSYSDIR=C:\msys64"
+if "%MSYSDIR:~-1%"=="\" set "MSYSDIR=%MSYSDIR:~0,-1%"
+set "MSYSFWD=%MSYSDIR:\=/%"
+set "MSYSSETUP=%TEMP%\build-msys2-setup.exe"
+rem the folder must not exist, or must be empty: the installer would write into what is already there
+if not exist "%MSYSDIR%\" goto msysget_free
+dir /b "%MSYSDIR%" 2>nul | findstr "^" >nul
+if not errorlevel 1 goto msysget_notempty
+:msysget_free
+echo.
+echo MSYS2 was not found. It provides the compilers that build the DLL, and it can be installed now:
+echo   download  %MSYS2URL%
+echo             ^(the MSYS2 installer, about 85 MB: it is saved in the temporary folder and deleted afterwards^)
+echo   install   silently into %MSYSDIR%, then MSYS2 is updated with pacman ^(a few minutes^)
+echo MSYS2 needs 64-bit Windows 10 or later. Nothing is downloaded or installed unless you answer 1.
+echo.
+echo         1  download and install MSYS2 now
+echo         0  none     do not install it: only show where to download MSYS2
+echo.
+call :ask 1
+if errorlevel 1 goto msysget_go
+goto msysget_manual
+:msysget_go
+if exist "%MSYSSETUP%" del /q "%MSYSSETUP%"
+echo.
+echo Downloading the MSYS2 installer ...
+curl.exe -f -L -# --retry 2 -o "%MSYSSETUP%" "%MSYS2URL%"
+if errorlevel 1 goto msysget_dlfail
+if not exist "%MSYSSETUP%" goto msysget_dlfail
+for %%F in ("%MSYSSETUP%") do set "MSYSSIZE=%%~zF"
+if %MSYSSIZE% lss 10000000 goto msysget_dlfail
+echo.
+echo Installing MSYS2 into %MSYSDIR% ^(a few minutes^) ...
+start "" /wait "%MSYSSETUP%" in --confirm-command --accept-messages --root "%MSYSFWD%"
+set "MSYSRC=%errorlevel%"
+del /q "%MSYSSETUP%" 2>nul
+if not "%MSYSRC%"=="0" echo The MSYS2 installer returned the exit code %MSYSRC%.
+if not exist "%MSYSDIR%\usr\bin\bash.exe" goto msysget_instfail
+set "MSYS2_ROOT=%MSYSDIR%"
+set "MSYSNEW=1"
+echo.
+echo MSYS2 is installed in %MSYS2_ROOT%. Updating it with pacman ^(a few minutes^) ...
+"%MSYS2_ROOT%\usr\bin\bash.exe" -lc " "
+"%MSYS2_ROOT%\usr\bin\bash.exe" -lc "pacman --noconfirm -Syuu"
+"%MSYS2_ROOT%\usr\bin\bash.exe" -lc "pacman --noconfirm -Syuu"
+if errorlevel 1 echo Warning: pacman could not update MSYS2 ^(see its messages above^): the build goes on.
+exit /b 0
+:msysget_notempty
+echo.
+echo MSYS2 was not found, but the folder %MSYSDIR% exists and is not empty: MSYS2 is not installed there.
+echo Empty it, or set MSYS2_ROOT to another folder, and run build.bat again.
+goto msysget_manual
+:msysget_dlfail
+if exist "%MSYSSETUP%" del /q "%MSYSSETUP%"
+echo.
+echo ERROR: the MSYS2 installer could not be downloaded from %MSYS2URL%
+goto msysget_manual
+:msysget_instfail
+echo.
+echo ERROR: the MSYS2 installation did not complete: %MSYSDIR%\usr\bin\bash.exe was not created.
+:msysget_manual
+echo.
+echo ERROR: MSYS2 was not found. Install it in C:\msys64 or set MSYS2_ROOT to its folder.
+echo        Download it from https://www.msys2.org
 exit /b 1
 
 rem ---- :build  arch, environments to try, output folder ------------------------------------------------
@@ -234,7 +320,8 @@ rem ---- :install  environments to try: no compiler was found, asks which one to
 rem Returns 0 if a package was installed (the caller looks for the compiler again) or 1 if not, with the message printed.
 :install
 echo.
-echo [%ARCH%] ERROR: no g++.exe found in %MSYS2_ROOT% ^(environments tried: %~1^).
+if defined MSYSNEW echo [%ARCH%] MSYS2 has just been installed and has no compiler yet ^(environments tried: %~1^).
+if not defined MSYSNEW echo [%ARCH%] ERROR: no g++.exe found in %MSYS2_ROOT% ^(environments tried: %~1^).
 set "NOPT=0"
 for %%E in (%~1) do call :addopt %%E
 if "%NOPT%"=="0" goto install_unknown

@@ -10,11 +10,7 @@ The newest version comes first. The version number is the one that Far shows for
 VERSION 1.0.1
 ----------------------------------------------------------------------------------------------------
 
-A correction release: no new command and no new key in the plug-in (build.bat has four additions,
-items 12 to 15). It follows a review of the source of 1.0.0. Every point of the review was checked
-against the code, and the defects were reproduced with tests before anything was changed. Points
-that are a matter of taste, or that are limits of the double precision numbers, were left as they
-are (see "Reviewed and left unchanged" below).
+A correction release: no new command and no new key in the plug-in.
 
 Corrected
 
@@ -32,12 +28,10 @@ Corrected
      0 and -0 are still accepted. The 1.0.0 help said that such a number "underflows to 0": this
      was a documented behaviour and it is changed on purpose.
 
-  3. fact was not exact. It used the gamma function of the C library, whose accuracy depends on
-     the runtime (in a test it was not exact even for 18!, which a double can hold exactly).
-     Now the product is computed with integer arithmetic and rounded once at the end: the result
-     is exact up to 22!, and the nearest double to the true value for larger X (checked for every
-     X from 0 to 170 against exact integers). For large X the last digit of the result can differ
-     from 1.0.0.
+  3. fact was not exact. It used the gamma function of the C library, whose accuracy depends on the
+     runtime. Now the product is computed with integer arithmetic and rounded once at the end: the
+     result is exact up to 22!, and the nearest double to the true value for larger X. For large X
+     the last digit of the result can differ from 1.0.0.
 
   4. min and max: for -0 and +0 the sign of the result depended on the order of the operands
      ("-0 0 max" gave -0, "0 -0 max" gave 0). Now -0 is always taken as smaller than +0.
@@ -63,43 +57,37 @@ Corrected
 Improved
 
   7. The cost of the undo steps. Before every command the whole stack was copied, and compared with
-     the new one afterwards, so the time of a line grew with the square of its number of tokens
-     (a line of 10000 numbers copied about 50 million entries). Now a step keeps only the levels
-     of the stack that the command can change: the top three, or the whole stack for clr, sum and
-     avg. The behaviour of undo is the same: every command that changes something is one step, up
-     to 100 steps, and a command that changes nothing is not recorded. Measured on a test machine:
-     a line of 10000 numbers 54 ms before, 2 ms now; 9999 additions on that stack 49 ms before,
-     1 ms now. The history of 100 steps takes a few KB instead of up to 16 MB (clr, sum and avg
-     still keep the whole stack).
-
-Documented (the behaviour is the same as in 1.0.0)
-
-  8. sin, cos, tan: the replacement of a very small result by 0 is described exactly. The limit is
-     four units in the last place of the argument, it is not applied for |X| of 1e9 or more, and
-     it can replace a result that is really different from 0: sin of 3.1415926535897936 is
-     -3.2e-16 and is shown as 0. The comment in the source no longer says that such a result
-     "carries no information".
-
-  9. tan gives no error at its poles: "90 deg tan" and "pi 2 / tan" give about 1.6e16, because the
-     argument is not exactly the angle of the pole.
-
- 10. Ctrl+Enter when the line leaves the stack empty (after clr, for example): the line has been
-     evaluated and is cleared, as with Enter, and the dialog stays open. Keeping the text in the
-     line would make the next Enter evaluate it twice, so this is not changed.
+     the new one afterwards, so the time of a line grew with the square of its number of tokens. Now
+     a step keeps only the levels of the stack that the command can change: the top three, or the
+     whole stack for clr, sum and avg. The behaviour of undo is the same: every command that changes
+     something is one step, up to 100 steps, and a command that changes nothing is not recorded. A
+     step also takes much less memory (clr, sum and avg still keep the whole stack).
 
 Language file
 
- 11. RPNCalcEng.lng has two more messages, at the end (the file now has 29): M_ERR_SAVE and
-     M_ERR_CMDLINE. A language file made for 1.0.0 keeps working, but Far reports a bad language
-     file (and the English text is used) when one of the two new messages is needed. To update
-     it, copy the two messages from RPNCalcEng.lng to the end of the file.
+  8. RPNCalcEng.lng has two more messages, at the end: M_ERR_SAVE and M_ERR_CMDLINE. A language file
+     made for 1.0.0 keeps working, but Far reports a bad language file (and the English text is
+     used) when one of the two new messages is needed. To update it, copy the two messages from
+     RPNCalcEng.lng to the end of the file.
 
 Build script
 
- 12. build.bat, MSYS2 not found: the error message now gives the address to download it
-     (https://www.msys2.org). The build stops, as before.
+  9. build.bat, MSYS2 not found: it used to stop with an error message. Now it first offers to
+     download MSYS2 and to install it, and asks for an answer. With 1 it downloads the MSYS2
+     installer (about 85 MB; the "latest" one of https://github.com/msys2/msys2-installer) with curl
+     into the temporary folder, runs it unattended to install MSYS2 into MSYS2_ROOT (C:\msys64 if it
+     is not set), deletes it, updates MSYS2 with pacman (pacman -Syuu, run twice) and goes on with
+     the build: the new MSYS2 has no compiler yet, so the menu described in the next item is shown.
+     With 0, with an answer that is not valid three times (also when the input is not a keyboard and
+     ends), or if the download or the installation fails, it prints the error message, which now
+     gives the address to download MSYS2 (https://www.msys2.org), and the build stops, as before.
+     Nothing is downloaded or installed without the answer 1. The offer is made only on x64 Windows
+     that has curl.exe, and when the folder for MSYS2 does not exist or is empty; in any other case
+     only the error message is printed. The new variable MSYS2URL names another installer instead of
+     the default one. The installer is not checked against a checksum, because none is published for
+     the "latest" one.
 
- 13. build.bat, MSYS2 found but the compiler of a DLL missing: it used to print the pacman
+ 10. build.bat, MSYS2 found but the compiler of a DLL missing: it used to print the pacman
      command and stop. Now it lists the compilers that it can install with pacman, among the
      environments that are tried (ENV64, ENV32): mingw-w64-x86_64-gcc and
      mingw-w64-ucrt-x86_64-gcc for the 64 bit DLL, mingw-w64-i686-gcc for the 32 bit one. The
@@ -112,49 +100,14 @@ Build script
      (mingw32): they can disappear from its repositories
      (https://www.msys2.org/docs/environments/).
 
- 14. build.bat zip: the package now contains CHANGELOG.TXT as well (the build stops with an
+ 11. build.bat zip: the package now contains CHANGELOG.TXT as well (the build stops with an
      error if the file is missing).
 
- 15. build.bat max: a new switch, optional (without it nothing changes). UPX is run with
+ 12. build.bat max: a new switch, optional (without it nothing changes). UPX is run with
      --best --ultra-brute --lzma instead of --best --lzma: it tries many more variants, takes
      much longer (the script says so) and keeps the smallest result it finds; the gain over the
      normal mode may be small. "max" cannot be used with "noupx". In both modes the script now
      shows the size of the DLL before and after the packing.
-
-Files that changed
-
- 16. rpncalc.cpp: the corrections above; version 1.0.1 (PLUGIN_VER_PATCH).
-     rpncalc.rc: version 1.0.1 (VER_PATCH, VER_STRING).
-     RPNCalcEng.lng: the two new messages.
-     RPNCalcEng.hlf, RPNCalc.txt, readme.md: the changes of behaviour described above, the new
-     messages, the structure of the engine, the build script.
-     build.bat: items 12 to 15.
-     CHANGELOG.TXT: new.
-
-Reviewed and left unchanged
-
-     - sum and avg lose small terms when large values cancel each other: a limit of the double
-       precision numbers, already described in the source.
-     - The replacement of libstdc++'s exception helpers and terminate handler (the size of the
-       DLL) depends on the library of the compiler. It is kept; RPN_KEEP_FUNCTEXCEPT turns the
-       replacement off, and build.bat tries again with it if the compilation fails.
-     - A switch to turn the replacement of small trigonometric results off, and an error for the
-       poles of tan, were not added: they would be new features, not corrections.
-
-How it was checked
-
-     The engine of 1.0.1 was run side by side with the one of 1.0.0 on 160000 random lines (every
-     command, errors, deep stacks, long undo histories): same results, same error texts, same
-     undo history after every line. The failure of every memory allocation was simulated in a set
-     of lines: in 1.0.0 the state was left changed in 341 of 619 cases, in 1.0.1 in none of 475.
-     The dialog, the "rpn:" command line, the settings and the insertion into the command line
-     were run against a simulated Far, including the failure of each call.
-     build.bat could not be run (the checks were made on Linux, without Windows). Its changes were
-     checked with a script (labels, line endings, characters) and read line by line by a second
-     reviewer, who also followed by hand the cases of the new menu (a choice, 0, answers that are
-     not valid, the end of the input, a failure of pacman, an unknown environment) and the command
-     lines with "max". UPX was not available: the size obtained with "max" was not compared with
-     the one of the normal packing.
 
 
 VERSION 1.0.0
